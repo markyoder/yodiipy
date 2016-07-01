@@ -1,9 +1,9 @@
-from Scientific.Geometry import *
+#from Scientific.Geometry import *
 from math import *
 import string
 #from matplotlib import *
 from pylab import *
-import copy
+#import copy
 
 def sortXYtuples(data, sortIndex1, sortIndex2, S1):
 	# note: this was a fun exercise before finding the map(operator.itemgetter()) built in way to sort
