@@ -21,6 +21,9 @@ except:
 #import urllib.request, urllib.error, urllib.parse
 import requests
 import numpy
+import math
+lat2km = 111.1
+deg2rad = math.pi/180.
 #
 # note on datetimes:
 # timezone awareness is confusing but not as bad as it looked a minute ago.
@@ -453,7 +456,7 @@ def auto_cat_params(lon_center=None, lat_center=None, d_lat_0=.25, d_lon_0=.5, d
 		d_lon_0 = -180.
 	#
 	# get a preliminary catalog:
-	print('stuff: ', lat_center, lon_center, d_lon_0, d_lat_0, mc_0, to_dt)
+	# print('stuff: ', lat_center, lon_center, d_lon_0, d_lat_0, mc_0, to_dt)
 	cat_0 = catfromANSS(lon=[lon_center-d_lon_0, lon_center+d_lon_0], lat=[lat_center - d_lat_0, lat_center+d_lat_0], minMag=mc_0, dates0=[to_dt-dtm.timedelta(days=dt_0), to_dt], fout=None, rec_array=True)
 	#
 	#biggest_earthquake = filter(lambda x: x['mag']==max(cat_0['mag']), cat_0)[0]
@@ -463,7 +466,7 @@ def auto_cat_params(lon_center=None, lat_center=None, d_lat_0=.25, d_lon_0=.5, d
 	L_r = .5*10.0**(.5*mainshock['mag'] - 1.76)
 	delta_lat = range_factor*L_r/lat2km
 	delta_lon = range_factor*L_r/(lat2km*math.cos(deg2rad*mainshock['lat']))
-	print("mainshock data: ", mainshock, L_r, delta_lat, delta_lon)
+	#print("mainshock data: ", mainshock, L_r, delta_lat, delta_lon)
 	#
 	return {'lon':[mainshock['lon']-delta_lon, mainshock['lon']+delta_lon], 'lat':[mainshock['lat']-delta_lat, mainshock['lat']+delta_lat], 'mainshock_date':mainshock['event_date'], 'mainshock_lat':mainshock['lat'], 'mainshock_lon':mainshock['lon']}
 	
