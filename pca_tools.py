@@ -181,8 +181,7 @@ def pca_test2(theta=math.pi/6., N=1000, x0=0., y0=0., fignum=0):
 	yprime = my_pca[1].dot([0.,1.]) + numpy.array([.5,0.])
 	#
 	plt.plot(*list(zip([.5,0.], xprime)), marker='s', ls='--', lw=2, color='r')
-	plt.plot(*list(zip([.5,0.], ypprime)), marker='s', ls='--', lw=2, color='g')
-#
+	plt.plot(*list(zip([.5,0.], yprime)), marker='s', ls='--', lw=2, color='g')
 #
 def yoda_pca(data_in):
 	# we'll rename this later. for now, this is just a super simple PCA approach to finding principal axes. we'll leave them in their original order
