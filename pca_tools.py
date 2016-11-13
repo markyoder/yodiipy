@@ -6,6 +6,10 @@ import random
 #
 from  matplotlib.mlab import PCA
 #
+#def lzip(*X):
+#	return list(zip(X))
+#
+#
 def pca1(theta=math.pi/6., a=1.0, b=.5, x0=0., y0=0., N=1000):
 	#
 	Rx = random.Random()
@@ -15,15 +19,15 @@ def pca1(theta=math.pi/6., a=1.0, b=.5, x0=0., y0=0., N=1000):
 	#
 	#XY = [rotate_ccw([x0 + a*Rx.random(), y0 + b*Ry.random()], theta, x0=x0, y0=y0) for n in xrange(N)]
 	XY = [[x0 + a*Rx.random(), y0 + b*Ry.random()] for n in range(N)]
-	print(("variances on raw matrix: ", numpy.var(zip(*XY)[0]), numpy.var(zip(*XY)[1])))
-	print(("std on raw matrix: ", numpy.std(zip(*XY)[0]), numpy.std(zip(*XY)[1])))
+	print(("variances on raw matrix: ", numpy.var(list(zip(*XY))[0]), numpy.var(list(zip(*XY))[1])))
+	print(("std on raw matrix: ", numpy.std(list(zip(*XY))[0]), numpy.std(list(zip(*XY))[1])))
 	XY = [rotate_ccw(rw, theta, x0=x0, y0=y0) for rw in XY]
 	# first, let's just visualize the rotation matrix:
 	#
 	pcas = PCA(numpy.array(XY))
 	#
 	# and do it manually:
-	x_mean, y_mean = numpy.mean(zip(*XY)[0]), numpy.mean(zip(*XY)[1])
+	x_mean, y_mean = numpy.mean(list(zip(*XY))[0]), numpy.mean(list(zip(*XY))[1])
 	my_mu = numpy.array([x_mean, y_mean])
 	print(("x_mean, y_mean: ", x_mean, y_mean))		# these check with pcas.mu
 	dXY = [[(x-x_mean), (y-y_mean)] for x,y in XY]
@@ -49,8 +53,8 @@ def pca1(theta=math.pi/6., a=1.0, b=.5, x0=0., y0=0., N=1000):
 	plt.figure(0)
 	plt.clf()
 	#
-	plt.plot(zip(*XY)[0], zip(*XY)[1], 'b.')
-	plt.plot(zip(*pcas.a)[0], zip(*pcas.a)[1], 'r.')
+	plt.plot([x for x,y in XY], [y for x,y in XY], 'b.')
+	plt.plot([x for x,y in pcas.a], [y for x,y in pcas.a], 'r.')
 	print(("means again: ", x_mean, y_mean))
 	plt.plot(x_mean, y_mean, 'co', ms=9, zorder=4)
 	#plt.plot(*pcas.mu, color='r', ms=5, marker='o',zorder=5)

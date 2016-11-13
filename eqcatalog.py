@@ -1,4 +1,4 @@
-from math import *	
+from math import *
 from scipy import *
 import scipy
 from pylab import *
