@@ -73,6 +73,22 @@ def pca1(theta=math.pi/6., a=1.0, b=.5, x0=0., y0=0., N=1000):
 	return [eig_vals, eig_vecs]
 
 class PCA_transform(object):
+	# Comments:
+	# while yes, this could be tuned up a bit, it looks about right for what it was intended to do...
+	# which is to use PCA to do a rotate-and-stretch transformation (a slightly non-standard application of PCA).
+	# accordingly, the use of normalized eigen-vectors/eigen-values as axis lengths makes sense.
+	#
+	# - use numpy.cov() instead of manually calculating cov (numpy should be compiled)
+	# - the stretching transform should probalby be coded as a dot-product with a diagonal matrix, D = numpy.diag(eig_vals)
+	# - ... and ingeneral, separate the salient matrices:
+	#   - input data, say X
+	#   - transformed data, U
+	#   - to_pca rotation R_to
+	#   - from_pca rotation R_from = inv(R_to)
+	#   - stretch = D = numpy.diag(eig_vals)
+	#
+	# ... and then figure out if we can use a fully compiled, one-stop-shopping for PCA, like scikit-learn.
+	# also, of course, double-check applications to be sure they're using the transform correctly.
 	def __init__(self, data_in=None, N=None, theta=None):
 		if data_in==None:
 			N=(1000 or N)
@@ -94,19 +110,25 @@ class PCA_transform(object):
 		# first, get means:
 		mus = [numpy.mean(col) for col in zip(*data)]		# mean values for each column. note, this will also constitute a vector 
 															# between our transoformed origin and the origina origin.
+		# note: we can get this with numpy.cov(list(zip(*A)))
 		data_centered = [[x-mus[j] for j,x in enumerate(rw)] for rw in data]
 		cov_normed = numpy.dot(numpy.array(list(zip(*data_centered))),numpy.array(data_centered))/(float(len(data_centered))-1.)
 		#
 		# get eigen-values/vectors:
 		# note: for a symmetric or hermitian matrix, we should use numpy.linalg.eigh(); it's faster, more accurate, and will quash complex value rounding errors.
 		#       it might be necessary, down the road, to just spin through these and dump any complex components.
-		eig_vals, eig_vecs = numpy.linalg.eig(cov_normed)
+		eig_vals, eig_vecs = numpy.linalg.eigh(cov_normed)
 		#
 		if data_in==None or data_in==self.data:			
 			#
 			self.max_eig = max(eig_vals)
 			self.max_eig_vec_index = eig_vals.tolist().index(self.max_eig)		# this might be a stupid way to do this;
+			#
+			# this is just wrong, so let's correct it. it shouldn't make any significant difference in the applcations that are using it.
+			# but note that we're doing this relative stretching... and there was a reason for that (aka, e/max(E) instead of just e).
+			# ... so let's get to this after we finish these paper revisions??? during???
 			self.axis_weights = [math.sqrt(e/self.max_eig) for e in eig_vals]
+			#self.axis_weights = [e/self.max_eig for e in eig_vals]
 			#
 			# assign stuff.
 			self.mus = numpy.array(mus)
@@ -119,6 +141,11 @@ class PCA_transform(object):
 			#self.max_eig_vec_index = max_eig_vec_index
 			self.cov_normed =cov_normed
 			#
+			# what we actually want here is more elegantly just something like:
+			# X' = x V^-1 E^-1
+			# where V is the transform of eigen-vectors-as-columns and E is diag(lambdas).
+			# ... and note we've been square-rooting our axis lengths, which is fine for the linear transformation applications
+			# we've been doing, but not proper PCA, strictly speaking... so we'll fix it.
 			self.to_PCA_rotation = numpy.array([[x*self.axis_weights[j] for j,x in enumerate(rw)] for rw in eig_vecs])
 		#
 		if do_return: return [eig_vals, eig_vecs]
