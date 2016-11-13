@@ -109,6 +109,34 @@ def getANSStoFilehandler(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dt
 	# we might return f, a string of f, or maybe a list of lines from f. we'll work that out shortly...
 	return f
 #
+def cat_from_geonet(lons=[168.077, 178.077], lats=[-47.757, -37.757], m_c=1.5, date_from = dtm.datetime(1990,1,1,tzinfo=tzutc), date_to=dtm.datetime.now(tzutc), depth_min=1., depth_max=1000., N_max=None, rec_array=True):
+	#
+	# queries like: https://quakesearch.geonet.org.nz/csv?bbox=163.60840,-49.18170,182.98828,-32.28713&minmag=1.5&maxmag=11.&mindepth=1.&maxdepth=100.&startdate=2016-10-13T21:00:00&enddate=2016-11-13T23:00:00
+	#
+	# now, the trick will be to properly handle all the string formats, etc. but otherwise, this shoudl be straight forward.
+	start_date = str(date_from)
+	end_date   = str(date_to)
+	#
+	url_str = 'https://quakesearch.geonet.org.nz/csv?bbox={l_lon},{l_lat}, {u_lon},{u_lat}&minmag={m_c}&maxmag=15.&mindepth={depth_min}&maxdepth={depth_max}&startdate={start_date}&enddate={end_date}'.format(**{'l_lon':lons[0], 'l_lat':lats[0], 'u_lon':lons[1], 'u_lat':lats[1], 'm_c':m_c, 'depth_min':depth_min, 'depth_max':depth_max, 'start_date':start_date, 'end_date':end_date})
+	#
+	# return data looks like:
+	#publicid,eventtype,origintime,modificationtime,longitude, latitude, magnitude, depth,magnitudetype,depthtype,evaluationmethod,evaluationstatus,evaluationmode,earthmodel,usedphasecount,usedstationcount,magnitudestationcount,minimumdistance,azimuthalgap,originerror,magnitudeuncertainty
+	# 2016p859278,,2016-11-13T22:23:13.185Z,2016-11-13T22:26:01.193Z,172.6048851,-42.58714783,4.209887061,16.71875,M,,NonLinLoc,,automatic,nz3drx,22,22,13,0.3131084226,119.296374,0.923292794,0
+	#
+	with urllib.request.urlopen(url_str) as f:
+		cls = f.readline()
+		datas = [rw.replace('\n','').split(',') for rw in f]
+	#
+	# now, either process all the data or just pick the cols we want... which is probably the better option. format this output like the others.
+	# we might go retro and format the inputs the same way, or at least make a wrapper to do that.
+	#
+	# cols will be:
+	# [('event_date', '<M8[us]'), ('lat', '<f8'), ('lon', '<f8'), ('mag', '<f8'), ('depth', '<f8'), ('event_date_float', '<f8')])
+	
+	
+	return url_str
+	
+#
 def catfromANSS(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
 	# get a basic catalog. then, we'll do a poly-subcat. we need a consistent catalog.
 	# eventually, cut up "japancatfromANSS()", etc. to call this base function and move to yodapy.
