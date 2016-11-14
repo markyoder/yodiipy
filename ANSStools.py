@@ -163,6 +163,9 @@ def cat_from_geonet(lons=[168.077, 178.077], lats=[-47.757, -37.757], m_c=1.5, d
 		
 		#for j,x in enumerate(X): d_d[col][j] = f_type(x)
 		#
+	# we can probably do a direct astype(float) or something, but just to be sure we get the desired behavior...
+	d_d['event_date_float'] = [mpd.date2num(x.astype(dtm.datetime)) for x in d_d['event_date']]
+	d_types += [('event_date_float', '<f8')]
 	#
 	# cols will be:
 	# [('event_date', '<M8[us]'), ('lat', '<f8'), ('lon', '<f8'), ('mag', '<f8'), ('depth', '<f8'), ('event_date_float', '<f8')])
