@@ -31,7 +31,7 @@ deg2rad = math.pi/180.
 # probably the better approach is to use datetime.now(pytz.timezone('UTC'))
 tzutc=pytz.timezone('UTC')
 
-def anssDateStr(x=dtm.datetime.now(pytz.timezone('UTC')) ):
+def anssDateStr(x=dtm.datetime.now(pytz.timezone('UTC')), delim_dt='/', delim_tm=':', dt_tm_sep=','):
 	# yoder, 13 july 2015: ANSS seems to have made some changes. these date formats are breaking. probalby a matter of leading 0's in dates; might be fractional seconds.
 	#yr=x.year
 	#mo=x.month
@@ -61,8 +61,10 @@ def anssDateStr(x=dtm.datetime.now(pytz.timezone('UTC')) ):
 	'''
 	#
 	#return '%s/%s/%s,%s:%s:%f' % (yr, mo, dy, hr, mn, fsecs)
-	return '%s/%s/%s,%s:%s:%s' % (yr, mo, dy, hr, mn, sc)
+	#return '%s/%s/%s,%s:%s:%s' % (yr, mo, dy, hr, mn, sc)
 	
+	return delim_dt.join([yr,mo,dy]) + dt_tm_sep + delim_tm.join([hr,mn,sc])
+#	
 def getANSStoFilehandler(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetime(2001,1,1, tzinfo=tzutc), dtm.datetime(2010, 12, 31, tzinfo=tzutc)], Nmax=999999):
 	# fetch data from ANSS; return a file handler.
 	#
@@ -114,28 +116,66 @@ def cat_from_geonet(lons=[168.077, 178.077], lats=[-47.757, -37.757], m_c=1.5, d
 	# queries like: https://quakesearch.geonet.org.nz/csv?bbox=163.60840,-49.18170,182.98828,-32.28713&minmag=1.5&maxmag=11.&mindepth=1.&maxdepth=100.&startdate=2016-10-13T21:00:00&enddate=2016-11-13T23:00:00
 	#
 	# now, the trick will be to properly handle all the string formats, etc. but otherwise, this shoudl be straight forward.
-	start_date = str(date_from)
-	end_date   = str(date_to)
+	#start_date = 'T'.join(str(date_from).split(' '))
+	#end_date   = 'T'.join(str(date_to).split(' '))
 	#
-	url_str = 'https://quakesearch.geonet.org.nz/csv?bbox={l_lon},{l_lat}, {u_lon},{u_lat}&minmag={m_c}&maxmag=15.&mindepth={depth_min}&maxdepth={depth_max}&startdate={start_date}&enddate={end_date}'.format(**{'l_lon':lons[0], 'l_lat':lats[0], 'u_lon':lons[1], 'u_lat':lats[1], 'm_c':m_c, 'depth_min':depth_min, 'depth_max':depth_max, 'start_date':start_date, 'end_date':end_date})
+	#cols = ['origintime','modificationtime','longitude', 'latitude', 'magnitude', 'depth','magnitudetype','magnitudeuncertainty']
+	col_name_map = {'origintime':'event_date','modificationtime':'mod_date','longitude':'lon', 'latitude':'lat', 'magnitude':'mag', 'depth':'depth','magnitudetype':'mag_type','magnitudeuncertainty':'mag_uncertainty'}
+	#
+	start_date = anssDateStr(date_from, delim_dt='-', delim_tm=':', dt_tm_sep='T')
+	end_date   = anssDateStr(date_to, delim_dt='-', delim_tm=':', dt_tm_sep='T')
+	#
+	url_str = 'https://quakesearch.geonet.org.nz/csv?bbox={l_lon},{l_lat},{u_lon},{u_lat}&minmag={m_c}&maxmag=15.&mindepth={depth_min}&maxdepth={depth_max}&startdate={start_date}&enddate={end_date}'.format(**{'l_lon':lons[0], 'l_lat':lats[0], 'u_lon':lons[1], 'u_lat':lats[1], 'm_c':m_c, 'depth_min':depth_min, 'depth_max':depth_max, 'start_date':start_date, 'end_date':end_date})
 	#
 	# return data looks like:
 	#publicid,eventtype,origintime,modificationtime,longitude, latitude, magnitude, depth,magnitudetype,depthtype,evaluationmethod,evaluationstatus,evaluationmode,earthmodel,usedphasecount,usedstationcount,magnitudestationcount,minimumdistance,azimuthalgap,originerror,magnitudeuncertainty
 	# 2016p859278,,2016-11-13T22:23:13.185Z,2016-11-13T22:26:01.193Z,172.6048851,-42.58714783,4.209887061,16.71875,M,,NonLinLoc,,automatic,nz3drx,22,22,13,0.3131084226,119.296374,0.923292794,0
 	#
+	#return url_str
 	with urllib.request.urlopen(url_str) as f:
-		cls = f.readline()
-		datas = [rw.replace('\n','').split(',') for rw in f]
+		cols = f.readline().decode().replace(' ', '').split(',')
+		datas = [rw.decode().replace('\n','').split(',') for rw in f]
 	#
+	#print('cols: ', cols)
+	#print('cols_2: ', [[col_name_map[key], len(col)] for key,col in zip(cols, zip(*datas)) if key in col_name_map.keys()])
+	
 	# now, either process all the data or just pick the cols we want... which is probably the better option. format this output like the others.
 	# we might go retro and format the inputs the same way, or at least make a wrapper to do that.
+	d_d = {col_name_map[key]:list(col) for key,col in zip(cols, zip(*datas)) if key in col_name_map.keys()}
+	d_types = []
+	for col, X in d_d.items():
+		if col in ('event_date', 'mod_date'):
+			f_type = numpy.datetime64
+			#d_d[col] = [numpy.datetime64(x) for x in X]
+			#d_d[col] = [x for x in X]
+			d_types += [(col, 'datetime64[us]')]
+		elif col == 'mag_type':
+			f_type = str
+			#d_d[col] = [x for x in X]
+			d_types += [(col, 'S4')]
+		else:
+			f_type=float
+			#d_d[col] = [float(x) for x in X]
+			d_types += [(col, '<f8')]
+		#
+		#print('col: ', col)
+		d_d[col] = [f_type(x) for x in X]
+		
+		#for j,x in enumerate(X): d_d[col][j] = f_type(x)
+		#
 	#
 	# cols will be:
 	# [('event_date', '<M8[us]'), ('lat', '<f8'), ('lon', '<f8'), ('mag', '<f8'), ('depth', '<f8'), ('event_date_float', '<f8')])
-	
-	
-	return url_str
-	
+	#
+	# 'datetime64[D]'
+	#return d_d.values()
+	#return d_d
+	#return [x for x in d_d.values()]
+	#print('dtypes: ', d_types, d_d.keys())
+	r_vals =  numpy.core.records.fromarrays([list(x) for x in d_d.values()], dtype=d_types)
+	r_vals.sort(order='event_date')
+	return r_vals
+#	
 #
 def catfromANSS(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
 	# get a basic catalog. then, we'll do a poly-subcat. we need a consistent catalog.
