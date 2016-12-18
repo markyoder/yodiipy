@@ -350,10 +350,12 @@ def cat_from_usgs(duration='week', mc=2.5, rec_array=True):
 			# for these, the "id" field is just the datetime, and anyway we only really care about a few of these fields. so let's wrap this up in a recarray,
 			#
 			#
-			cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3]]]]
+			#cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3]]]]
+			cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3], mpd.date2num(this_dt)]]]
 		#
 		if rec_array:
-			cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	
+			#cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	
+			cat_out=numpy.rec.array((cat_out if len(cat_out)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
 		#
 		return cat_out
 #
