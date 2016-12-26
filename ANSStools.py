@@ -357,6 +357,11 @@ def cat_from_usgs(duration='week', mc=2.5, rec_array=True):
 		if rec_array:
 			#cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])
 			cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f'), ('event_date_float', '<f8')])		
+		#	cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3], mpd.date2num(this_dt)]]]
+		##
+		#if rec_array:
+		#	#cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	
+		#	cat_out=numpy.rec.array((cat_out if len(cat_out)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
 		#
 		return cat_out
 #
@@ -366,9 +371,11 @@ def cat_from_anss_and_usgs(lons=[135., 150.], lats=[30., 41.5], mc=4.0, cat_len_
 	#
 	cat_usgs_0 = cat_from_usgs(duration='week', mc=2.5, rec_array=True)
 	cat_usgs = [rw for rw in cat_usgs_0 if rw['lon']>lons[0] and rw['lon']<lons[1] and rw['lat']>lats[0] and rw['lat']<lats[1]
-		        and rw['mag']>mc]
+		        and rw['mag']>=mc]
 	to_dt = dtm.datetime.now(pytz.utc)
 	cat_anss = catfromANSS(lon=lons, lat=lats, dates0=[to_dt-dtm.timedelta(days=cat_len_days), to_dt-dtm.timedelta(days=7)], minMag=mc, rec_array=True)
+	#
+	#print('len(usgs): ', len(cat_usgs), len(cat_anss))
 	#
 #	if len(cat_usgs)>0:
 	# TODO: as i recall, there is a way to do this more directly with numpy.append(), but it's not working here.
