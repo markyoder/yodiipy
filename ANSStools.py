@@ -350,12 +350,36 @@ def cat_from_usgs(duration='week', mc=2.5, rec_array=True):
 			# for these, the "id" field is just the datetime, and anyway we only really care about a few of these fields. so let's wrap this up in a recarray,
 			#
 			#
-			cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3]]]]
+			#cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3]]]]
+			# + [mpd.date2num(rw[0].astype(dtm.datetime))]
+			cat_out += [[this_dt] + [float(x) for x in rws[1:3] + [rws[4], rws[3]]] + [mpd.date2num(this_dt)] ]
 		#
 		if rec_array:
-			cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	
+			#cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])
+			cat_out=numpy.rec.array(cat_out, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f'), ('event_date_float', '<f8')])		
 		#
 		return cat_out
+#
+def cat_from_anss_and_usgs(lons=[135., 150.], lats=[30., 41.5], mc=4.0, cat_len_days=3650, Nmax=None, rec_array=True):
+	# TODO: this combines the USGS most recent 7 days catalog with a longer ANSS catalog. however, there still may be some overlap
+	# in the first day, so we need to write a uniquifier sub-script (which can be used for NZ geonet, italian, etc. catalogs as well).
+	#
+	cat_usgs_0 = cat_from_usgs(duration='week', mc=2.5, rec_array=True)
+	cat_usgs = [rw for rw in cat_usgs_0 if rw['lon']>lons[0] and rw['lon']<lons[1] and rw['lat']>lats[0] and rw['lat']<lats[1]
+		        and rw['mag']>mc]
+	to_dt = dtm.datetime.now(pytz.utc)
+	cat_anss = catfromANSS(lon=lons, lat=lats, dates0=[to_dt-dtm.timedelta(days=cat_len_days), to_dt-dtm.timedelta(days=7)], minMag=mc, rec_array=True)
+	#
+#	if len(cat_usgs)>0:
+	# TODO: as i recall, there is a way to do this more directly with numpy.append(), but it's not working here.
+	# so we can make lists, then wrap in recarrays, but there's probalby a faster, more efficient way...
+	#cat_usgs = numpy.rec.array(numpy.array(cat_usgs), dtype=cat_usgs_0.dtype)
+	#new_cat = numpy.append(cat_usgs, cat_anss)
+	new_cat = cat_usgs + cat_anss.tolist()
+	new_cat = numpy.core.records.fromarrays(zip(*new_cat), dtype=cat_anss.dtype)
+	new_cat.sort(order='event_date')
+	#
+	return new_cat
 #
 def dictfromANSS(lons=[135., 150.], lats=[30., 41.5], mc=4.0, date_range=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=999999, fout='cats/mycat.cat'):
 	#
