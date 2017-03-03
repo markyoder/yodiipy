@@ -2,6 +2,7 @@
 import glob
 import os
 import imp
+import sys
 
 excluded_py_files=['__init__.py']
 #local_path = os.path.split(__file__)[0]
