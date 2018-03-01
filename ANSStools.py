@@ -547,7 +547,8 @@ def auto_cat_params(lon_center=None, lat_center=None, d_lat_0=.25, d_lon_0=.5, d
 	#
 	#if to_dt == None: to_dt = dtm.datetime.now(pytz.timezone('UTC'))
 	to_dt = (to_dt or dtm.datetime.now(pytz.timezone('UTC')))
-	mc_0  = (mc_0 or mc)
+	#mc_0  = (mc_0 or mc)
+    if mc_0 is None: mc_0 = mc
 	#
 	if lon_center==None and lat_center==None:
 		# let's look for any large earthquake in the world. assume for this, mc
