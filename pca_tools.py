@@ -4,6 +4,8 @@ import pylab as plt
 import math
 import random
 #
+import sklearn
+#
 from  matplotlib.mlab import PCA
 #
 #def lzip(*X):
@@ -110,13 +112,24 @@ class PCA_transform(object):
 		#
 		'''
 		data = (data_in or self.data)
+		data = numpy.array(data)
 		#
 		# first, get means:
 		mus = [numpy.mean(col) for col in zip(*data)]		# mean values for each column. note, this will also constitute a vector 
 															# between our transoformed origin and the origina origin.
 		# note: we can get this with numpy.cov(list(zip(*A)))
 		data_centered = [[x-mus[j] for j,x in enumerate(rw)] for rw in data]
+		#
+		# TODO:use::
+		#data_centered = data - numpy.mean(data, axis=0)
+		#
+		# NOTE: conventional wisdom would suggest using numpy.cov(). in general, we might want to do our own covariance calculation, since we can then choose our
+		#  axis of rotation (as opposed to necessarily subtracting off the algebraic mean). in this case, we are subtractingoff the algebraic mean, so we should
+		#  probably either 1) use numpy.cov() or 2) allow [mus] to be passed as a parameter.
+		#
 		cov_normed = numpy.dot(numpy.array(list(zip(*data_centered))),numpy.array(data_centered))/(float(len(data_centered))-1.)
+		# TODO: use::
+		# cov_normed = numpy.cov(data_centered.T) 
 		#
 		# get eigen-values/vectors:
 		# note: for a symmetric or hermitian matrix, we should use numpy.linalg.eigh(); it's faster, more accurate, and will quash complex value rounding errors.
@@ -187,9 +200,218 @@ class PCA_transform(object):
 		#
 		#[plt.plot(*(self.mus + v), color='m', ls='--', marker='*') for v in zip(*self.eig_vecs)]		# needs to be corrected to use axes[]
 		[plt.plot(*(self.mus + v), color='m', ls='--', ms=10, marker='*') for v in zip(*self.to_PCA_rotation)]
+#		
+#
+class PCA_cross_section(list):
+	def __init__(self, XYW, x_min=None, x_max=None, y_min=None, y_max=None, n_NN=4, n_points_xc=None):
+		# compute the covariance of [[x*w, y*w], ...], get eigen-value/vectors,
+		#  construct a cross section vector, then compute cross-section values via a weighted
+		#  average (which we can show is a Bayes maximum-likelihood value) from each point's NN.
+		# TODO: add an option for a distance calculation? use a spherical distance formula in
+		#  both the NN finder (presumably from sklearn, which i think uses an r-tree index) and
+		#  the weighted average.
+		#
+		# TODO: do we need to keep the original inputs? this is more memory and compute intensive. how often
+		#  do we re-use these objects? are we typically better off just recomputing the whole class for variations
+		#  on PCA bounds, etc?
+		XYW = numpy.array(XYW)
+		#
+		if x_min is None: x_min = min(XYW.T[0])
+		if x_max is None: x_max = max(XYW.T[0])
+		if y_min is None: y_min = min(XYW.T[1])
+		if y_max is None: y_max = max(XYW.T[1])
+		#
+		#XYW_pca = XYW[XYW.T[0]>=x_min and XYW.T[0]<=x_max and XYW.T[1]>=y_min and XYW.T[1]<=y_max]
+		f_between = lambda x, y, x1, x2, y1, y2: (x>=x1 and x<=x2 and y>=y1 and y<=y2)
+		#
+		# trying to use numpy indexing here, so we end up keeping the indices of the array where these
+		#  criteria are met. having trouble getting it to take a multi-valued condition. maybe the better
+		#  approach is to pass an array of indices that satisfy the "between" condition?
+		#
+		# this requires multiple passes throught the array (which is most likely not terribly costly)
+		#XYW_pca = XYW[XYW.T[0]>=x_min]
+		#XYW_pca = XYW_pca[XYW.T[0]<=x_max]
+		# TODO: maybe, instead of copying this, we define the index and implement it as a @property function?
+		# so idx_pca = numpy.array([k for k,(x,y,w) in... ]) and then self.XYW_pca 
+		# returns self.XYW[self.idx_pca] ??
+		XYW_pca = XYW[numpy.array([k for k,(x,y,w) in enumerate(XYW) 
+								   if f_between(x,y, x_min, x_max, y_min, y_max)])]
+		#
+		#print('***DEBUG lens: ', len(XYW_pca), len(XYW))
+		#n_points_xc = n_points_xc or len(XYW_pca)
+		n_points_xc = n_points_xc or max(len(set(XYW_pca.T[0])), len(XYW_pca))
+		#
+		#XYw_pca = numpy.array([[x*w,y*w] for x,y,w in XYW_pca ])
+		# TODO?: interpolate Y,w onto a regulaized X axis, or assume valid inputs?
+		#
+		#w_cov = numpy.cov(XYw_pca, rowvar=False)
+		# TODO: will matrices be properly aligned if we just skip all of the A.T ? probably at least
+		#      one layer of this to revise...
+		#
+		# as a sanity check, do a line-fit to the local data to get an approximate b-value:
+		xy_w = XYW_pca.T[0:2].T*numpy.atleast_2d(XYW_pca.T[2]).T
+		lsq_xyz = numpy.linalg.lstsq([[1.,x] for x,y in xy_w], [y for x,y in xy_w])
+		#print('** DEBUG lsq: ', lsq_xyz[0])
+		#
+		w_cov = numpy.cov(XYW_pca.T[0:2].T*numpy.atleast_2d(XYW_pca.T[2]).T, rowvar=False)
+		# Note: leave eig_vecs matrix intact, so we can use it for rotation transformations.
+		eig_vals, eig_vecs = numpy.linalg.eig(w_cov)
+		#print('*** Debug (prelim): ', eig_vals, eig_vecs)
+		#
+		# now, sort by eigenvalues:
+		idx = (eig_vals**2.).argsort()[::-1]   
+		#
+		#print('eigs (idx, vals, vecs): ', idx, len(eig_vals), len(eig_vecs))
+		#
+		#eig_vals = eig_vals.T[idx].T
+		# TODO: sort out (equivalent) syntax for (not) fancy inxing... this is from SourceForge, or
+		#    or something, but it is not quite right (i never use this syntax, but it's probably fast)
+		#e1,e2 = eig_vecs[:,idx]
+		# this looks correct (ish):
+		e1, e2 = eig_vecs.T[idx]
+		# note: we need to be careful about how we define the vectors of the data vs the axes. are we
+		#   rotating the axes to the data or the data to the axes (which are identical/inverse) operations
+		#   but it is important to be clear with respect too making rotations vs drawing cross-secgtions.
+		#
+		#print('*** e1, e2: ', e1, e2)
+		#print('eigs (idx, vals, vecs): ', idx, len(eig_vals), len(eig_vecs))
+		#
+		# Compute linear slope factors, for y' = a + bx type transformations, as opposed to the
+		#  X' = dot(e_k, X) or X' = L_x*e_1, y' = L_y * e_2 approaches (just multiplying the eigen-vectors).
+		b_major = e1[1]/e1[0] 
+		b_minor = e2[1]/e2[0]
+		#
+		# stash inputs:
+		self.__dict__.update({key:val for key,val in locals().items() if not key in ('self', '__class__')})
+		#
+		# etas.ETAS_array['x'], y0 + b_major*(etas.ETAS_array['x'] - x0)
+		X_pca, Y_pca, W_pca = XYW_pca.T
+		X = numpy.array(sorted(set(X_pca)))
+		# XY = [pca_cross_2.e1*x for x in numpy.linspace(-5., 5., 100)]
+		#
+		dx = max(X_pca)-min(X_pca)
+		x0 = numpy.mean(X_pca)
+		y0 = numpy.mean(Y_pca)
+		Xs = numpy.linspace(-dx, dx, n_points_xc)
+		# numpy.mean(X_pca)
+		#
+		# TODO: maybe revisit the default cross-section vector.
+		super(PCA_cross_section, self).__init__(numpy.array([X, 
+		                                            numpy.mean(Y_pca) + b_major*(X-numpy.mean(X_pca))]).T)
+		#y0 = numpy.mean(Y_pca)
+		#
+		# probably the 'right' way to compute the cross-section vector is to just multiply (scale) and 
+		#  translate (add to) the eigen-vector:
+		#super(PCA_cross_section, self).__init__([[e1[0]*x + x0, e1[1]*x + y0]
+		#                                for x in numpy.linspace(-dx, dx, n_points_xc)])
+		del X_pca, Y_pca, W_pca, X
+		#
 		
+	#
+	def get_cross_section_xy(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, b=None):
+		'''
+		# TODO: this should work -- it will return a  cross-section, but i think we need to be more thoughtful
+		#	 about how we go about this, specifically how we choose the middle. we'll need some variationos
+		#	 of this to use the center, weighted center, etc. and then a smart way to draw the cross-section
+		#	 axis through it (y = a + bx vs (x',y') = x*v1)
+		#
+		'''
+		if b is None: b = self.b_major
+		#
+		if x_min is None:
+			x_min = min(self.X)
+		if x_max is None:
+			x_max = max(self.X)
+		if y_min is None:
+			y_min = min(self.Y)
+		if y_max is None:
+			y_max = max(self.Y)
+		#
+		# 
+		X = numpy.linspace(x_min, x_max, n_points)
+		#return numpy.array([X, numpy.mean(Y_pca) + b*(X-numpy.mean(self.X_pca))]).T
+		#
+		# this will use an unweighted mean to center:
+		#return numpy.array([[x,y] for x,y in 
+		#                numpy.array([X, numpy.mean(self.Y_pca) + b*(X-numpy.mean(self.X_pca))]).T
+		#                    if (y>=y_min and y<=y_max)])
+		#
+		# ... and a weighted mean:
+		return numpy.array([[x,y] for x,y in 
+		                numpy.array([X, numpy.average(self.Y_pca, weights=self.W_pca) +
+		                             b*(X-numpy.average(self.X_pca, weights=self.W_pca))]).T
+		                    if (y>=y_min and y<=y_max)])
+#
+	def get_cross_section_zs(self, XY_xc=None, XYZ=None, n_NN=None):
+		#TODO: this is not working. so maybe take it off-line to work out the code, then put back into
+		#	the class.
+		#
+		n_NN = n_NN or self.n_NN
+		if XY_xc is None: XY_xc = numpy.array(self)
+		#if XYZ is None:   XYZ = self.XYW_pca
+		if XYZ is None:   XYZ = self.XYW
+		#
+		# get NN:
+		# TODO: look at "fancy" indexing version of this X.T[0:2].T operation, something like:
+		#   X[0:2, :]
+		nbrs = sklearn.neighbors.NearestNeighbors(n_neighbors=n_NN, algorithm='ball_tree').fit(XYZ.T[0:2].T)
+		#
+		# TODO: i think a better and more efficient way to do this is to just assign the weights, from
+		#  the distances, as w_jk = 1/(r_jk + <r>_k) or 1.
+		#  where "or" kicks in if the denominator (r_jk + <r>_k) == 0
+		# we will want to carefully evaluate the corner cases and evaluate how the fraction addition
+		# is affected when we have these singular cases.
 		
+		distances, indices = nbrs.kneighbors(XY_xc)
+		#
+		# TODO: are distances always positive?
+		mean_distances = numpy.mean(distances, axis=1)
+		#denom = numpy.array([1./r if r!=0 else 1. for r in mean_distances])
+		weights        = numpy.array([[1./(r+mu) if (r+mu)!=0. else 1. for r in rw]
+									  for rw, mu in zip(distances, mean_distances)])
 		
+		#
+		# we want a weighted average of the z values, based on NN distances,
+		# z_xc_k = sum_j(z_j/r_jk)/sum(1/r_jk)
+		# but we need to handle 1/0 cases in a generalized way. maybe something like:
+		# w = 1/(r_jk + a*<r>_k)
+		# where <r>_k is the mean nn distance and a is a tuning parameter;
+		#  if <r>==0, evenly weight all elements?
+		#
+		# like this:
+		# (but the main thing is to efficiently handle the x/0 cases).
+		#
+		z_xc = [numpy.dot(XYZ.T[2][js], ws)/numpy.sum(ws)
+				for js, ws, mu in zip(indices, weights, mean_distances)]
+		#z_xc = [numpy.sum([XYZ[j][2] for j in js]) for js, ws, mu in zip(indices, weights, mean_distances)]
+		#
+		return z_xc
+		
+	#@property
+	#def XYW_pca(self):
+	#	numpy.array([[x,y,w] for x,y,w in XYw if (x>=x_min and x<=x_max and y>=y_min and y<=y_max) ])
+	#
+	@property
+	def X(self):
+		return self.XYW.T[0]
+	@property
+	def Y(self):
+		return self.XYW.T[1]
+	@property
+	def w(self):
+		return self.XYW.T[2]
+	#
+	@property
+	def X_pca(self):
+		return self.XYW_pca.T[0]
+	@property
+	def Y_pca(self):
+		return self.XYW_pca.T[1]
+	@property
+	def W_pca(self):
+		return self.XYW_pca.T[2]
+	#		
+#		
 def pca_test2(theta=math.pi/6., N=1000, x0=0., y0=0., fignum=0):
 	#
 	my_data = make_test_data(theta=theta, N=N, x0=x0, y0=y0)
@@ -205,14 +427,18 @@ def pca_test2(theta=math.pi/6., N=1000, x0=0., y0=0., fignum=0):
 	plt.figure(fignum)
 	plt.clf()
 	plt.plot(*list(zip(*my_data)), marker='.', color='b', zorder=2, ls='')
-	plt.plot(*list(zip([0,.0], ax_x)), marker='s', ls='-', lw=2, color='r')
-	plt.plot(*list(zip([0,.0], ax_y)), marker='s', ls='-', lw=2, color='g')
+	plt.plot(*list(zip([0,.0], ax_x)), marker='s', ls='-', lw=2, color='r', label='ax_x')
+	plt.plot(*list(zip([0,.0], ax_y)), marker='s', ls='-', lw=2, color='g', label='ax_y')
 	#
 	xprime = my_pca[1].dot([1.,0.]) + numpy.array([.5,0.])
 	yprime = my_pca[1].dot([0.,1.]) + numpy.array([.5,0.])
 	#
-	plt.plot(*list(zip([.5,0.], xprime)), marker='s', ls='--', lw=2, color='r')
-	plt.plot(*list(zip([.5,0.], yprime)), marker='s', ls='--', lw=2, color='g')
+	plt.plot(*list(zip([.5,0.], xprime)), marker='s', ls='--', lw=2, color='m', label='x_prime')
+	plt.plot(*list(zip([.5,0.], yprime)), marker='s', ls='--', lw=2, color='c', label='y_prime')
+	#
+	print('basically, axes should be parallel/perpendicualar to the data-cloud')
+	#
+	plt.legend(loc=0)
 #
 def yoda_pca(data_in):
 	# we'll rename this later. for now, this is just a super simple PCA approach to finding principal axes. we'll leave them in their original order
@@ -220,10 +446,12 @@ def yoda_pca(data_in):
 	# so, basically, do normal PCA (mean value, eigen-vals/vecs, etc.
 	# assume data are like [[x0, x1, x2, x3], [x0,x1,x2,x3],...]
 	#
-	mus = [numpy.mean(col) for col in zip(*data_in)]
+	#mus = [numpy.mean(col) for col in zip(*data_in)]
 	#print(mus)
-	centered = [[x-mus[j] for j,x in enumerate(rw)] for rw in data_in]
-	my_cov = numpy.dot(numpy.array(list(zip(*centered))),numpy.array(centered))/(float(len(data_in))-1.)
+	#centered = [[x-mus[j] for j,x in enumerate(rw)] for rw in data_in]
+	#centered = numpy.array(centered)-numpy.mean(centered, axis=0)
+	#my_cov = numpy.dot(numpy.array(list(zip(*centered))),numpy.array(centered))/(float(len(data_in))-1.)
+	my_cov = numpy.cov(numpy.array(data_in).T)
 	#
 	# for now, we can't assume hermitian or symmetric matrices, so use eig(), not eigh()
 	eig_vals, eig_vecs = numpy.linalg.eig(my_cov)

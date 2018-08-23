@@ -25,6 +25,15 @@ import math
 lat2km = 111.1
 deg2rad = math.pi/180.
 #
+# comcat?
+try:
+	import libcomcat
+	from libcomcat import search
+	have_comcat = True
+except:
+	have_comcat = False
+	print('comcat not available. consider installing comcat for improved catalog operations; see https://github.com/usgs/libcomcat')
+#
 # note on datetimes:
 # timezone awareness is confusing but not as bad as it looked a minute ago.
 # datetime.utcnow() gives a UTC time, but without tz awareness.
@@ -534,7 +543,27 @@ def getANSSlist(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetim
 		anssList+=[[rwEvdt, rwLat, rwLon, rwDepth, rwMag, rwMagType, rwNst, rwGap, rwClo, rwrms, rwsrc, rwCatEventId]]
 	return anssList
 #
-	
+if have_comcat:
+	def cat_from_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
+		from_dt = dates0[0]
+		to_dt   = dates0[1] or dtm.datetime.now()
+		#
+		my_cat = libcomcat.search.search(starttime=from_dt,
+                       endtime=to_dt,
+                       minmagnitude=minMag, 
+                       minlatitude=lat[0], maxlatitude=lat[1],
+                       minlongitude=lon[0], maxlongitude=lon[1])
+        # TODO: double-check timezone handling. before, we always explicitly required UTC, but this usually needs to be manually
+        #  handled on the datetime.datetime level.
+		# timezone handling? i think comcat assumes UTC; maybe we just cast using from_num(to_num(dt))
+		my_cat = [[ev.time, ev.latitude, ev.longitude, ev.magnitude, ev.depth, mpd.date2num(ev.time)] for ev in my_cat]
+		#
+		if rec_array:
+			my_cat = numpy.core.records.fromarrays(zip(*my_cat), dtype=[('event_date', 'M8[us]'), 
+			   ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
+		#
+		return my_cat
+#	
 def auto_cat_params(lon_center=None, lat_center=None, d_lat_0=.25, d_lon_0=.5, dt_0=10, mc_0=4.5, to_dt=None, range_factor=5., **kwargs):
 	'''
 	# auto_cat: for a given input area of interest, find the largest earthquake, then get a new catalog around that earthquake,
