@@ -410,6 +410,10 @@ class PCA_cross_section(list):
 	@property
 	def W_pca(self):
 		return self.XYW_pca.T[2]
+	#
+	@property
+	def eig_vecs_inv(self):
+		return numpy.linalg.inv(self.eig_vecs)
 	#		
 #		
 def pca_test2(theta=math.pi/6., N=1000, x0=0., y0=0., fignum=0):
