@@ -234,6 +234,7 @@ class PCA_cross_section(list):
 		# TODO: maybe, instead of copying this, we define the index and implement it as a @property function?
 		# so idx_pca = numpy.array([k for k,(x,y,w) in... ]) and then self.XYW_pca 
 		# returns self.XYW[self.idx_pca] ??
+		#
 		XYW_pca = XYW[numpy.array([k for k,(x,y,w) in enumerate(XYW) 
 								   if f_between(x,y, x_min, x_max, y_min, y_max)])]
 		#
@@ -308,8 +309,19 @@ class PCA_cross_section(list):
 		#
 		
 	#
-	def get_cross_section_xy(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, b=None):
+	def get_cross_section_xy_lin_func(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, b=None):
 		'''
+		# **DO NOT **DEPRICATE WARNING: this computes cross section cooridnates via a linear transformation... it looks like a sort of 
+		#  silly way to do it, and can be problematic for steep slopes. the newer get_cross_section_xy() version uses a rotation on
+		#  the PCA axes, rather than a liner function y' = a + b*x, which is of course still a linear transformation, just a smarter
+		#  way of doing it. THAT SAID, this is a simple interface to get an arbitray cross section. we can give some (x,y) boundaries,
+		#  specify a slope, and get a cross section, so keep this.
+		#
+		# note: this function can be removed as soon as we are happy with its replacement.
+		#
+		# returns [[x,y], ...] coordinates of the cross section, to (presumabley) be used to compute mean cross-section
+		#   weights (z-values) via a NN method.
+		#
 		# TODO: this should work -- it will return a  cross-section, but i think we need to be more thoughtful
 		#	 about how we go about this, specifically how we choose the middle. we'll need some variationos
 		#	 of this to use the center, weighted center, etc. and then a smart way to draw the cross-section
@@ -337,10 +349,54 @@ class PCA_cross_section(list):
 		#                    if (y>=y_min and y<=y_max)])
 		#
 		# ... and a weighted mean:
+		#  this is a bit difficult to follow, and the outer array() cast can probalby be simplified... 
+		#  the basics are:
+		#    - return all values for x_min < x < x_max and y_min < y < y_max (outer array() cast)
+		#    - the X axis is n_points between x_min < x x_max
+		#    - then just a linear function along X. 
+		#    - note: we don't do a PCA here, but we use the slope computed in the PCA. probably a better appraoch
+		#      is to take even spaced points along [X,0] and then PCA-rotate them into the new coordinate system.
+		#   
 		return numpy.array([[x,y] for x,y in 
 		                numpy.array([X, numpy.average(self.Y_pca, weights=self.W_pca) +
 		                             b*(X-numpy.average(self.X_pca, weights=self.W_pca))]).T
 		                    if (y>=y_min and y<=y_max)])
+		#
+	def get_cross_section_xy(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, minor=False):
+		'''
+		# returns [[x,y], ...] coordinates of the cross section, to (presumabley) be used to compute mean cross-section
+		#   weights (z-values) via a NN method.
+		# @minor: if true, return the track of the minor,not major, axis.
+		#
+		# TODO: this should work -- it will return a  cross-section, but i think we need to be more thoughtful
+		#	 about how we go about this, specifically how we choose the middle. we'll need some variationos
+		#	 of this to use the center, weighted center, etc. and then a smart way to draw the cross-section
+		#	 axis through it (y = a + bx vs (x',y') = x*v1)
+		#
+		'''
+		#if b is None: b = self.b_major
+		#
+		if x_min is None:
+			x_min = min(self.X)
+		if x_max is None:
+			x_max = max(self.X)
+		if y_min is None:
+			y_min = min(self.Y)
+		if y_max is None:
+			y_max = max(self.Y)
+		#
+		# 
+		#X = numpy.linspace(x_min, x_max, n_points)
+		x_mu, y_mu = numpy.average(self.XYW_pca[:,0:2], weights = self.XYW_pca[:,2], axis=0)
+		#x_mu =  numpy.average(self.X_pca, weights=self.W_pca)
+		#y_mu =  numpy.average(self.Y_pca, weights=self.W_pca)
+		#
+		if not minor:
+			XY = numpy.array([numpy.linspace(x_min, x_max, n_points) - x_mu, numpy.zeros(n_points)]).T
+		else:
+			XY = numpy.array([numpy.zeros(n_points), numpy.linspace(y_min, y_max, n_points) - y_mu]).T
+		#
+		return numpy.dot(XY, self.eig_vecs_inv) + numpy.array([x_mu, y_mu])
 #
 	def get_cross_section_zs(self, XY_xc=None, XYZ=None, n_NN=None):
 		#TODO: this is not working. so maybe take it off-line to work out the code, then put back into
@@ -391,25 +447,32 @@ class PCA_cross_section(list):
 	#def XYW_pca(self):
 	#	numpy.array([[x,y,w] for x,y,w in XYw if (x>=x_min and x<=x_max and y>=y_min and y<=y_max) ])
 	#
+	# TODO: use numpy fancy indexing...
 	@property
 	def X(self):
-		return self.XYW.T[0]
+		#return self.XYW.T[0]
+		return self.XYW[:,0]
 	@property
 	def Y(self):
-		return self.XYW.T[1]
+		#return self.XYW.T[1]
+		return self.XYW[:,1]
 	@property
 	def w(self):
-		return self.XYW.T[2]
+		#return self.XYW.T[2]
+		return self.XYW[:,2]
 	#
 	@property
 	def X_pca(self):
-		return self.XYW_pca.T[0]
+		#return self.XYW_pca.T[0]
+		return self.XYW_pca[:,0]
 	@property
 	def Y_pca(self):
-		return self.XYW_pca.T[1]
+		#return self.XYW_pca.T[1]
+		return self.XYW_pca[:,1]
 	@property
 	def W_pca(self):
-		return self.XYW_pca.T[2]
+		#return self.XYW_pca.T[2]
+		return self.XYW_pca[:,2]
 	#
 	@property
 	def eig_vecs_inv(self):
