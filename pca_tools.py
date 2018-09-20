@@ -240,7 +240,10 @@ class PCA_cross_section(list):
 		#
 		#print('***DEBUG lens: ', len(XYW_pca), len(XYW))
 		#n_points_xc = n_points_xc or len(XYW_pca)
+		# ... so i don't recall the logic here. we want approximately the length of the x or y axis:
+		# ???
 		n_points_xc = n_points_xc or max(len(set(XYW_pca.T[0])), len(XYW_pca))
+		#n_points_xc = n_points_xc or max([len(list(set(XYW_pca[:,0]))), len(list(set(XYW_pca[:,1])))])
 		#
 		#XYw_pca = numpy.array([[x*w,y*w] for x,y,w in XYW_pca ])
 		# TODO?: interpolate Y,w onto a regulaized X axis, or assume valid inputs?
@@ -286,7 +289,11 @@ class PCA_cross_section(list):
 		self.__dict__.update({key:val for key,val in locals().items() if not key in ('self', '__class__')})
 		#
 		# etas.ETAS_array['x'], y0 + b_major*(etas.ETAS_array['x'] - x0)
+		# NOTE: we can optionally replace this next line with, X_pca = self.X_pca, etc.; self.XYW_pca has been assigned
+		#     and we have definde @property functions for X_, Y_, W_ _pca. leaving the XYW_pca.T call is probaby faster,
+		#     but might lead to confusion down the road...
 		X_pca, Y_pca, W_pca = XYW_pca.T
+		#
 		X = numpy.array(sorted(set(X_pca)))
 		# XY = [pca_cross_2.e1*x for x in numpy.linspace(-5., 5., 100)]
 		#
@@ -296,10 +303,12 @@ class PCA_cross_section(list):
 		Xs = numpy.linspace(-dx, dx, n_points_xc)
 		# numpy.mean(X_pca)
 		#
-		# TODO: maybe revisit the default cross-section vector.
-		super(PCA_cross_section, self).__init__(numpy.array([X, 
-		                                            numpy.mean(Y_pca) + b_major*(X-numpy.mean(X_pca))]).T)
-		#y0 = numpy.mean(Y_pca)
+		# TODO (DEPRICATED): maybe revisit the default cross-section vector.
+		#super(PCA_cross_section, self).__init__(numpy.array([X, 
+		#                                            numpy.mean(Y_pca) + b_major*(X-numpy.mean(X_pca))]).T)
+		# TODO (DONE):
+		#   set self with dot-product transform: numpy.dot(XY, self.eig_vecs_inv) + numpy.array([x_mu, y_mu]
+		super(PCA_cross_section, self).__init__(self.get_cross_section_xy(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, n_points=n_points_xc))
 		#
 		# probably the 'right' way to compute the cross-section vector is to just multiply (scale) and 
 		#  translate (add to) the eigen-vector:
@@ -309,7 +318,7 @@ class PCA_cross_section(list):
 		#
 		
 	#
-	def get_cross_section_xy_lin_func(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, b=None):
+	def get_cross_section_xy_lin_func(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=None, b=None):
 		'''
 		# **DO NOT **DEPRICATE WARNING: this computes cross section cooridnates via a linear transformation... it looks like a sort of 
 		#  silly way to do it, and can be problematic for steep slopes. the newer get_cross_section_xy() version uses a rotation on
@@ -328,6 +337,9 @@ class PCA_cross_section(list):
 		#	 axis through it (y = a + bx vs (x',y') = x*v1)
 		#
 		'''
+		#
+		n_points = n_points or self.n_points_xc
+		#
 		if b is None: b = self.b_major
 		#
 		if x_min is None:
@@ -362,7 +374,7 @@ class PCA_cross_section(list):
 		                             b*(X-numpy.average(self.X_pca, weights=self.W_pca))]).T
 		                    if (y>=y_min and y<=y_max)])
 		#
-	def get_cross_section_xy(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=250, minor=False):
+	def get_cross_section_xy(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=None, minor=False):
 		'''
 		# returns [[x,y], ...] coordinates of the cross section, to (presumabley) be used to compute mean cross-section
 		#   weights (z-values) via a NN method.
@@ -374,6 +386,7 @@ class PCA_cross_section(list):
 		#	 axis through it (y = a + bx vs (x',y') = x*v1)
 		#
 		'''
+		n_points = n_points or self.n_points_xc
 		#if b is None: b = self.b_major
 		#
 		if x_min is None:
@@ -397,8 +410,11 @@ class PCA_cross_section(list):
 			XY = numpy.array([numpy.zeros(n_points), numpy.linspace(y_min, y_max, n_points) - y_mu]).T
 		#
 		return numpy.dot(XY, self.eig_vecs_inv) + numpy.array([x_mu, y_mu])
-#
+	#
+	
 	def get_cross_section_zs(self, XY_xc=None, XYZ=None, n_NN=None):
+		# TODO: reconfigure this to pass n_points and to use get_cross_secition_xy() as default behavior. the self.XY_xc behavior may have a different number
+		#   of points. also, we need to compute an approximate distance along the cross-section coordinates for the "X" axis. 
 		#TODO: this is not working. so maybe take it off-line to work out the code, then put back into
 		#	the class.
 		#
@@ -410,7 +426,8 @@ class PCA_cross_section(list):
 		# get NN:
 		# TODO: look at "fancy" indexing version of this X.T[0:2].T operation, something like:
 		#   X[0:2, :]
-		nbrs = sklearn.neighbors.NearestNeighbors(n_neighbors=n_NN, algorithm='ball_tree').fit(XYZ.T[0:2].T)
+		#nbrs = sklearn.neighbors.NearestNeighbors(n_neighbors=n_NN, algorithm='ball_tree').fit(XYZ.T[0:2].T)
+		nbrs = sklearn.neighbors.NearestNeighbors(n_neighbors=n_NN, algorithm='ball_tree').fit(XYZ[:,0:2])
 		#
 		# TODO: i think a better and more efficient way to do this is to just assign the weights, from
 		#  the distances, as w_jk = 1/(r_jk + <r>_k) or 1.
@@ -425,7 +442,6 @@ class PCA_cross_section(list):
 		#denom = numpy.array([1./r if r!=0 else 1. for r in mean_distances])
 		weights        = numpy.array([[1./(r+mu) if (r+mu)!=0. else 1. for r in rw]
 									  for rw, mu in zip(distances, mean_distances)])
-		
 		#
 		# we want a weighted average of the z values, based on NN distances,
 		# z_xc_k = sum_j(z_j/r_jk)/sum(1/r_jk)
@@ -447,6 +463,12 @@ class PCA_cross_section(list):
 	#def XYW_pca(self):
 	#	numpy.array([[x,y,w] for x,y,w in XYw if (x>=x_min and x<=x_max and y>=y_min and y<=y_max) ])
 	#
+	def dist_axis(self, XY=None):
+		if XY is None:
+			XY = self
+		#
+		return numpy.sqrt([ (x - XY[0][0])**2. + (y - XY[0][1])**2. for x,y in XY])
+	#
 	# TODO: use numpy fancy indexing...
 	@property
 	def X(self):
@@ -463,8 +485,8 @@ class PCA_cross_section(list):
 	#
 	@property
 	def X_pca(self):
-		#return self.XYW_pca.T[0]
-		return self.XYW_pca[:,0]
+		return self.XYW_pca.T[0]
+		#return self.XYW_pca[:,0]
 	@property
 	def Y_pca(self):
 		#return self.XYW_pca.T[1]
