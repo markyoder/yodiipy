@@ -301,22 +301,20 @@ class PCA_cross_section(list):
 		x0 = numpy.mean(X_pca)
 		y0 = numpy.mean(Y_pca)
 		Xs = numpy.linspace(-dx, dx, n_points_xc)
-		# numpy.mean(X_pca)
 		#
-		# TODO (DEPRICATED): maybe revisit the default cross-section vector.
-		#super(PCA_cross_section, self).__init__(numpy.array([X, 
-		#                                            numpy.mean(Y_pca) + b_major*(X-numpy.mean(X_pca))]).T)
-		# TODO (DONE):
 		#   set self with dot-product transform: numpy.dot(XY, self.eig_vecs_inv) + numpy.array([x_mu, y_mu]
 		super(PCA_cross_section, self).__init__(self.get_cross_section_xy(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max, n_points=n_points_xc))
 		#
-		# probably the 'right' way to compute the cross-section vector is to just multiply (scale) and 
-		#  translate (add to) the eigen-vector:
-		#super(PCA_cross_section, self).__init__([[e1[0]*x + x0, e1[1]*x + y0]
-		#                                for x in numpy.linspace(-dx, dx, n_points_xc)])
+		self.minor_axis = self.get_cross_section_xy(x_min=x_min, x_max=x_max, y_min=y_min, y_max=y_max,\
+			 n_points=n_points_xc, minor=True)
+		#
 		del X_pca, Y_pca, W_pca, X
 		#
 		
+	#
+	@property
+	def major_axis(self):
+		return numpy.array(self)
 	#
 	def get_cross_section_xy_lin_func(self, x_min=None, x_max=None, y_min=None, y_max=None, n_points=None, b=None):
 		'''
@@ -468,6 +466,13 @@ class PCA_cross_section(list):
 			XY = self
 		#
 		return numpy.sqrt([ (x - XY[0][0])**2. + (y - XY[0][1])**2. for x,y in XY])
+	#
+	@property
+	def dist_axis_major(self):
+		return self.dist_axis(XY=self.major_axis)
+	@property
+	def dist_axis_minor(self):
+		return self.dist_axis(XY=self.minor_axis)
 	#
 	# TODO: use numpy fancy indexing...
 	@property

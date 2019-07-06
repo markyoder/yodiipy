@@ -56,7 +56,6 @@ class Kalman_Filter(list):
 				var0 = numpy.var([Zs[0], z])
 				if var0!=0: break
 		#
-		#
 		# eventually, include  change-prediction step.
 		#dx_x = 0.   # delta_x value (change, predict, etc.)
 		#dx_var = 1.   # variance of prediction step.
@@ -68,15 +67,18 @@ class Kalman_Filter(list):
 		self.__dict__.update(locals())
 		#
 		self.process_sequence()
+		self.Xs = numpy.array(self.Xs)
 		#
 		super(Kalman_Filter, self).__init__(self.Xs)
 	#
 	@property
 	def xs(self):
-		return numpy.array([x for x,v in self.Xs])
+		#return numpy.array([x for x,v in self.Xs])
+		return numpy.array(self.Xs)[:,0]
 	@property
 	def vars(self):
-		return numpy.array([v for x,v in self.Xs])
+		#return numpy.array([v for x,v in self.Xs])
+		return numpy.array(self.Xs)[:,1]
 	#
 	def process_sequence(self):
 		#self

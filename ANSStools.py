@@ -546,7 +546,11 @@ def getANSSlist(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetim
 if have_comcat:
 	def cat_from_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
 		from_dt = dates0[0]
-		to_dt   = dates0[1] or dtm.datetime.now()
+		#to_dt   = dates0[1] or dtm.datetime.now()
+		if dates0[1] is None:
+			to_dt = dtm.datetime.now(pytz.timezone('UTC'))
+		else:
+			to_dt = dates0[1]
 		#
 		my_cat = libcomcat.search.search(starttime=from_dt,
                        endtime=to_dt,
