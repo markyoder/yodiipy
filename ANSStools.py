@@ -4,7 +4,8 @@ import pytz
 import calendar
 import operator
 import sys
-
+#
+# TODO: it is probably time to say goodnight to Python 2.x support...
 import urllib
 try:
 	# should work with python 3.x
@@ -26,6 +27,10 @@ lat2km = 111.1
 deg2rad = math.pi/180.
 #
 # comcat?
+# TODO 13 Sept. 2019: want to run ETAS (and other stuff) on HPC systems, but comcat -- awesome as it may be,
+#. is a HUGE bulky conda install. but it looks like we should be able to just hack the web API, like we did
+#. before, only on the new server, new API protocol. fortunately, it looks like this is going to be easy.
+#. the old system did an HTTP(s): POST; the new one is a simple, retro query-string syntax.
 try:
 	import libcomcat
 	from libcomcat import search
@@ -485,6 +490,7 @@ def getANSSlist(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetim
 		print("data handle fetched...")
 		
 	for rw_0 in fin:
+		# python2 vs python3 string/binary_array handling:
 		if sys.version_info.major ==  2:
 			rw = rw_0
 		else:
@@ -546,7 +552,7 @@ def getANSSlist(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetim
 if have_comcat:
 	def cat_from_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
 		from_dt = dates0[0]
-		to_dt   = dates0[1] or dtm.datetime.now()
+		to_dt   = dates0[1] or dtm.datetime.now(tzutc)
 		#
 		my_cat = libcomcat.search.search(starttime=from_dt,
                        endtime=to_dt,
