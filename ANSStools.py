@@ -315,7 +315,7 @@ catfromANSS = cat_from_anss_comcat
 #
 ##########################
 ###########
-# TODO: there is value in keeping some of these functions, ie the USGS catalogs (though they are included in comcat now too...) and maybe
+# TODO: there may be value in keeping some of these functions, ie the USGS catalogs (though they are included in comcat now too...) and maybe
 #  the NZ catalog (it should be included in comcat, but who knows...)
 #
 #
@@ -354,51 +354,6 @@ def anssDateStr(x=dtm.datetime.now(pytz.timezone('UTC')), delim_dt='/', delim_tm
 	
 	return delim_dt.join([yr,mo,dy]) + dt_tm_sep + delim_tm.join([hr,mn,sc])
 #	
-def getANSStoFilehandler(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetime(2001,1,1, tzinfo=tzutc), dtm.datetime(2010, 12, 31, tzinfo=tzutc)], Nmax=999999):
-	# fetch data from ANSS; return a file handler.
-	#
-	# use urllib in "post" mode. an example from http://www.python.org/doc/current/library/urllib.html#urllib.FancyURLopener)
-	# using "get" (aka, query-string method; note the ?%s string at the end of the URL, this is a single pram call to .urlopen):
-	#
-	#>>> import urllib
-	#>>> params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
-	#>>> f = urllib.urlopen("http://www.musi-cal.com/cgi-bin/query?%s" % params)
-	#>>> print f.read()
-	#
-	# using "post" (note this is a 2 pram call):
-	#>>> import urllib
-	#>>> params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
-	#>>> f = urllib.urlopen("http://www.musi-cal.com/cgi-bin/query", params)
-	#>>> print f.read()
-	#
-	# make ANSS prams dictionary (thank james for the bash-template):
-	# ANSSquery has day-resolution:
-	# revision: ANSS has time resolution, but you have to replace "-" -> "/" and the " " (space) -> ","
-	#dates=[dtm.date(dates0[0].year, dates0[0].month, dates0[0].day), dtm.date(dates0[1].year, dates0[1].month, dates0[1].day)]
-	dates=dates0
-	datestr1 = anssDateStr(dates[0])
-	datestr2 = anssDateStr(dates[1])
-	#print datestr1, datestr2
-	#
-	#anssPrams={'format':'cnss', 'output':'readable', 'mintime':str(dates[0]).replace('-', '/'), 'maxtime':str(dates[1]).replace('-', '/'), 'minmag':str(minMag), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':'E', 'searchlimit':Nmax}
-	# so this is better, but i think it is still limited to 1 second resolution.
-	#
-	anssPrams={'format':'cnss', 'output':'readable', 'mintime':datestr1, 'maxtime':datestr2, 'minmag':str(minMag), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':b'E', 'searchlimit':Nmax}
-	#anssPrams={'format':b'cnss', 'output':b'readable', 'mintime':bytearray(datestr1, 'utf-8'), 'maxtime':bytearray(datestr2, 'utf-8'), 'minmag':bytearray(str(minMag), 'utf-8'), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':b'E', 'searchlimit':Nmax}
-	#print "debug: ", anssPrams
-	#post_data = urllib.parse.urlencode(anssPrams)
-	#binary_post_data = post_data.encode('ascii')
-	#
-	# now, let's support some backwards compatibility, at least for a little while:
-	if sys.version_info.major == 2:
-		# old python...
-		f = urllib.urlopen('http://www.ncedc.org/cgi-bin/catalog-search2.pl', urllib.urlencode(anssPrams))
-	else:
-		binary_post_data = urllib.parse.urlencode(anssPrams).encode('ascii')
-		f = urllib.request.urlopen('http://www.ncedc.org/cgi-bin/catalog-search2.pl', binary_post_data )
-	#
-	# we might return f, a string of f, or maybe a list of lines from f. we'll work that out shortly...
-	return f
 #
 def cat_from_geonet(lons=[168.077, 178.077], lats=[-47.757, -37.757], m_c=1.5, date_from = dtm.datetime(1990,1,1,tzinfo=tzutc), date_to=dtm.datetime.now(tzutc), depth_min=1., depth_max=1000., N_max=None, rec_array=True):
 	#
@@ -467,100 +422,6 @@ def cat_from_geonet(lons=[168.077, 178.077], lats=[-47.757, -37.757], m_c=1.5, d
 	r_vals =  numpy.core.records.fromarrays([list(x) for x in d_d.values()], dtype=d_types)
 	r_vals.sort(order='event_date')
 	return r_vals
-#	
-#
-#def catfromANSS(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
-def catfromANSS_depricated_20190915(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
-	# 2019-09-15 yoder: this function depricated to use new comcat web API.
-	#
-	# get a basic catalog. then, we'll do a poly-subcat. we need a consistent catalog.
-	# eventually, cut up "japancatfromANSS()", etc. to call this base function and move to yodapy.
-	#
-	# note: there may be a version inconsisency. older versions of this function may have returned catlist raw, in which
-	# [..., depth, mag], where we regurn [..., mag, depth] here.
-	#
-	if Nmax==None: Nmax=999999
-	#
-	if dates0[1]==None:
-		# i think this needs a "date" object, and datetime breaks.
-		# so, make a Now() for date.
-		#nowdtm=dtm.datetime.now()
-		#dates0[1]=dtm.date(nowdtm.year, nowdtm.month, nowdtm.day)
-		dates0[1]=dtm.datetime.now(tzutc)
-	#	
-	catlist=getANSSlist(lon, lat, minMag, dates0, Nmax, None)
-	if fout==None: print(" no file.")
-	
-	if fout!=None:
-		f=open(fout, 'w')
-		f.write("#anss catalog\n")
-		f.write("#query_date(UTC): %s" % str(dtm.datetime.now(pytz.timezone('UTC'))))
-		f.write("#lon=%s\tlat=%s\tm0=%f\tdates=%s\n" % (str(lon), str(lat), minMag, str(dates0)))
-	
-	rlist=[]
-	for rw in catlist:
-		# simple, right? except that ANSS has a habit of writing useless date-times like "2001/10/08 24:00:07.62" (hour=24), or
-		# where minute=60. we could toss these. for now, assume 2001/10/8 24:00:00 -> 2001/10/9/00:00:00. change by proper time-arithmetic.
-		#
-		# it might be worth checking to see if numpy.datetime64() handles these exceptions.
-		#
-		# first, parse the date-string:
-		strDt, strTm=rw[0].split()[0], rw[0].split()[1]
-		if '/' in strDt: delim='/'
-		if '-' in strDt: delim='-'
-		strDts=strDt.split(delim)
-		strTms=strTm.split(':')
-		yr=int(strDts[0])
-		mnth=int(strDts[1])
-		dy=int(strDts[2])
-		hr=int(strTms[0])
-		mn=int(strTms[1])
-		sc=float(strTms[2])
-		microsecs=(10**6)*sc%1.
-		# one approach is to start with year, month and add all the subsequent quantities using datetime.timedelta objects, which we have to
-		# do once we get into callendar addition anyway...
-		#so let's assume the date part is correct:
-		myDt=dtm.datetime(yr, mnth, dy, tzinfo=tzutc)
-		#mytimedelta=dtm.timedelta(hours=hr)
-		myDt+=dtm.timedelta(hours=hr)
-		myDt+=dtm.timedelta(minutes=mn)
-		myDt+=dtm.timedelta(seconds=sc)
-		myDt+=dtm.timedelta(microseconds=microsecs)
-		#
-		# note: we switch the order of depth, mag here. 
-		#"list" gives [dt, lat, lon, depth, mag]; "cat" gives [dt, lat, lon, mag, depth?]
-		# if we add a float-date value to the end of this, does it screw up any conventions? might screw up BASScasts. so we can add it here -- but
-		# it has to be at the end. so let's give it a go (sometimes facilitates easier date-handling), but be prepared to drop it.
-		# 
-		#rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3])]]
-		rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]
-		if fout!=None:
-			myDtStr='%d/%d/%d %d:%d:%d.%d' % (myDt.year, myDt.month, myDt.day, myDt.hour, myDt.minute, myDt.second, myDt.microsecond)	
-			#
-			#f.write('%s\t%s\t%s\t%s\n' % (rw[0], rw[1], rw[2], rw[4]))
-			#f.write('%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4]))
-			
-			#f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr] + rw[1:]]))
-			f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]))
-			
-			#f.write('%s\t%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4], rw[3]))	# indlude depth...
-	if fout!=None:
-		f.close()
-	# 
-	#return catlist
-	# to do:
-	# re-cast rlist as a recarray. here's probaby the best way to do this (there are lots of ways to
-	# cast recarrays; this appears to be the most direct:
-	# rlist=numpy.rec.array(rlist, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	# note: numpy.rec.array() also has "names=" and "formats=" keywords.
-	# (but we'll want to test existing programs to be sure this doesn't break).
-	#
-	# yoder: cast as recarray:
-	if rec_array:
-		#rlist=numpy.rec.array(rlist, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])
-		# note: specify f8 (or greater), or float dates might be truncated).
-		rlist=numpy.rec.array((rlist if len(rlist)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
-	
-	return rlist
 #
 def cat_from_usgs(duration='week', mc=2.5, rec_array=True):
 	# use: http://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.csv
@@ -661,6 +522,9 @@ def cat_from_anss_and_usgs(lons=[135., 150.], lats=[30., 41.5], mc=4.0, cat_len_
 	# TODO: this combines the USGS most recent 7 days catalog with a longer ANSS catalog. however, there still may be some overlap
 	# in the first day, so we need to write a uniquifier sub-script (which can be used for NZ geonet, italian, etc. catalogs as well).
 	#
+	# TODO 2019-09-15 yoder: Is there any point to adapting this to concatenate USGS most recent with comcat? comcat is supposed to do this already,
+	#  in which case, this can go the way of the dodo, with the older ANSS scripts.
+	#
 	cat_usgs_0 = cat_from_usgs(duration='week', mc=2.5, rec_array=True)
 	cat_usgs = [rw for rw in cat_usgs_0 if rw['lon']>lons[0] and rw['lon']<lons[1] and rw['lat']>lats[0] and rw['lat']<lats[1] and rw['mag']>=mc]
 	to_dt = dtm.datetime.now(pytz.utc)
@@ -678,6 +542,150 @@ def cat_from_anss_and_usgs(lons=[135., 150.], lats=[30., 41.5], mc=4.0, cat_len_
 	new_cat.sort(order='event_date')
 	#
 	return new_cat
+#
+######################
+# the old ANSS scripts. these can probably be discarded.
+#
+def getANSStoFilehandler(lon=[-125, -115], lat=[32, 45], minMag=4.92, dates0=[dtm.datetime(2001,1,1, tzinfo=tzutc), dtm.datetime(2010, 12, 31, tzinfo=tzutc)], Nmax=999999):
+	# fetch data from ANSS; return a file handler.
+	#
+	# use urllib in "post" mode. an example from http://www.python.org/doc/current/library/urllib.html#urllib.FancyURLopener)
+	# using "get" (aka, query-string method; note the ?%s string at the end of the URL, this is a single pram call to .urlopen):
+	#
+	#>>> import urllib
+	#>>> params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
+	#>>> f = urllib.urlopen("http://www.musi-cal.com/cgi-bin/query?%s" % params)
+	#>>> print f.read()
+	#
+	# using "post" (note this is a 2 pram call):
+	#>>> import urllib
+	#>>> params = urllib.urlencode({'spam': 1, 'eggs': 2, 'bacon': 0})
+	#>>> f = urllib.urlopen("http://www.musi-cal.com/cgi-bin/query", params)
+	#>>> print f.read()
+	#
+	# make ANSS prams dictionary (thank james for the bash-template):
+	# ANSSquery has day-resolution:
+	# revision: ANSS has time resolution, but you have to replace "-" -> "/" and the " " (space) -> ","
+	#dates=[dtm.date(dates0[0].year, dates0[0].month, dates0[0].day), dtm.date(dates0[1].year, dates0[1].month, dates0[1].day)]
+	dates=dates0
+	datestr1 = anssDateStr(dates[0])
+	datestr2 = anssDateStr(dates[1])
+	#print datestr1, datestr2
+	#
+	#anssPrams={'format':'cnss', 'output':'readable', 'mintime':str(dates[0]).replace('-', '/'), 'maxtime':str(dates[1]).replace('-', '/'), 'minmag':str(minMag), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':'E', 'searchlimit':Nmax}
+	# so this is better, but i think it is still limited to 1 second resolution.
+	#
+	anssPrams={'format':'cnss', 'output':'readable', 'mintime':datestr1, 'maxtime':datestr2, 'minmag':str(minMag), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':b'E', 'searchlimit':Nmax}
+	#anssPrams={'format':b'cnss', 'output':b'readable', 'mintime':bytearray(datestr1, 'utf-8'), 'maxtime':bytearray(datestr2, 'utf-8'), 'minmag':bytearray(str(minMag), 'utf-8'), 'minlat':lat[0], 'maxlat':lat[1], 'minlon':lon[0], 'maxlon':lon[1], 'etype':b'E', 'searchlimit':Nmax}
+	#print "debug: ", anssPrams
+	#post_data = urllib.parse.urlencode(anssPrams)
+	#binary_post_data = post_data.encode('ascii')
+	#
+	# now, let's support some backwards compatibility, at least for a little while:
+	if sys.version_info.major == 2:
+		# old python...
+		f = urllib.urlopen('http://www.ncedc.org/cgi-bin/catalog-search2.pl', urllib.urlencode(anssPrams))
+	else:
+		binary_post_data = urllib.parse.urlencode(anssPrams).encode('ascii')
+		f = urllib.request.urlopen('http://www.ncedc.org/cgi-bin/catalog-search2.pl', binary_post_data )
+	#
+	# we might return f, a string of f, or maybe a list of lines from f. we'll work that out shortly...
+	return f
+#
+#
+#def catfromANSS(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
+def catfromANSS_depricated_20190915(lon=[135., 150.], lat=[30., 41.5], minMag=4.0, dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, fout=None, rec_array=True):
+	# 2019-09-15 yoder: this function depricated to use new comcat web API.
+	#
+	# get a basic catalog. then, we'll do a poly-subcat. we need a consistent catalog.
+	# eventually, cut up "japancatfromANSS()", etc. to call this base function and move to yodapy.
+	#
+	# note: there may be a version inconsisency. older versions of this function may have returned catlist raw, in which
+	# [..., depth, mag], where we regurn [..., mag, depth] here.
+	#
+	if Nmax==None: Nmax=999999
+	#
+	if dates0[1]==None:
+		# i think this needs a "date" object, and datetime breaks.
+		# so, make a Now() for date.
+		#nowdtm=dtm.datetime.now()
+		#dates0[1]=dtm.date(nowdtm.year, nowdtm.month, nowdtm.day)
+		dates0[1]=dtm.datetime.now(tzutc)
+	#
+	catlist=getANSSlist(lon, lat, minMag, dates0, Nmax, None)
+	if fout==None: print(" no file.")
+	
+	if fout!=None:
+		f=open(fout, 'w')
+		f.write("#anss catalog\n")
+		f.write("#query_date(UTC): %s" % str(dtm.datetime.now(pytz.timezone('UTC'))))
+		f.write("#lon=%s\tlat=%s\tm0=%f\tdates=%s\n" % (str(lon), str(lat), minMag, str(dates0)))
+
+	rlist=[]
+	for rw in catlist:
+		# simple, right? except that ANSS has a habit of writing useless date-times like "2001/10/08 24:00:07.62" (hour=24), or
+		# where minute=60. we could toss these. for now, assume 2001/10/8 24:00:00 -> 2001/10/9/00:00:00. change by proper time-arithmetic.
+		#
+		# it might be worth checking to see if numpy.datetime64() handles these exceptions.
+		#
+		# first, parse the date-string:
+		strDt, strTm=rw[0].split()[0], rw[0].split()[1]
+		if '/' in strDt: delim='/'
+		if '-' in strDt: delim='-'
+		strDts=strDt.split(delim)
+		strTms=strTm.split(':')
+		yr=int(strDts[0])
+		mnth=int(strDts[1])
+		dy=int(strDts[2])
+		hr=int(strTms[0])
+		mn=int(strTms[1])
+		sc=float(strTms[2])
+		microsecs=(10**6)*sc%1.
+		# one approach is to start with year, month and add all the subsequent quantities using datetime.timedelta objects, which we have to
+		# do once we get into callendar addition anyway...
+		#so let's assume the date part is correct:
+		myDt=dtm.datetime(yr, mnth, dy, tzinfo=tzutc)
+		#mytimedelta=dtm.timedelta(hours=hr)
+		myDt+=dtm.timedelta(hours=hr)
+		myDt+=dtm.timedelta(minutes=mn)
+		myDt+=dtm.timedelta(seconds=sc)
+		myDt+=dtm.timedelta(microseconds=microsecs)
+		#
+		# note: we switch the order of depth, mag here.
+		#"list" gives [dt, lat, lon, depth, mag]; "cat" gives [dt, lat, lon, mag, depth?]
+		# if we add a float-date value to the end of this, does it screw up any conventions? might screw up BASScasts. so we can add it here -- but
+		# it has to be at the end. so let's give it a go (sometimes facilitates easier date-handling), but be prepared to drop it.
+		#
+		#rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3])]]
+		rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]
+		if fout!=None:
+			myDtStr='%d/%d/%d %d:%d:%d.%d' % (myDt.year, myDt.month, myDt.day, myDt.hour, myDt.minute, myDt.second, myDt.microsecond)
+			#
+			#f.write('%s\t%s\t%s\t%s\n' % (rw[0], rw[1], rw[2], rw[4]))
+			#f.write('%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4]))
+			
+			#f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr] + rw[1:]]))
+			f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]))
+
+#f.write('%s\t%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4], rw[3]))	# indlude depth...
+if fout!=None:
+	f.close()
+	#
+	#return catlist
+	# to do:
+	# re-cast rlist as a recarray. here's probaby the best way to do this (there are lots of ways to
+	# cast recarrays; this appears to be the most direct:
+	# rlist=numpy.rec.array(rlist, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])	# note: numpy.rec.array() also has "names=" and "formats=" keywords.
+	# (but we'll want to test existing programs to be sure this doesn't break).
+	#
+	# yoder: cast as recarray:
+	if rec_array:
+		#rlist=numpy.rec.array(rlist, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])
+		# note: specify f8 (or greater), or float dates might be truncated).
+		rlist=numpy.rec.array((rlist if len(rlist)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
+
+return rlist
+#
 #
 def dictfromANSS(lons=[135., 150.], lats=[30., 41.5], mc=4.0, date_range=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=999999, fout='cats/mycat.cat'):
 	#
