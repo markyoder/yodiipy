@@ -613,13 +613,14 @@ def catfromANSS_depricated_20190915(lon=[135., 150.], lat=[30., 41.5], minMag=4.
 		dates0[1]=dtm.datetime.now(tzutc)
 	#
 	catlist=getANSSlist(lon, lat, minMag, dates0, Nmax, None)
-	if fout==None: print(" no file.")
+	if fout==None: print(" no output file.")
 	
 	if fout!=None:
-		f=open(fout, 'w')
-		f.write("#anss catalog\n")
-		f.write("#query_date(UTC): %s" % str(dtm.datetime.now(pytz.timezone('UTC'))))
-		f.write("#lon=%s\tlat=%s\tm0=%f\tdates=%s\n" % (str(lon), str(lat), minMag, str(dates0)))
+		#f=open(fout, 'w')
+		with open(fout, 'w') as f:
+			f.write("#anss catalog\n")
+			f.write("#query_date(UTC): %s" % str(dtm.datetime.now(pytz.timezone('UTC'))))
+			f.write("#lon=%s\tlat=%s\tm0=%f\tdates=%s\n" % (str(lon), str(lat), minMag, str(dates0)))
 
 	rlist=[]
 	for rw in catlist:
@@ -659,17 +660,18 @@ def catfromANSS_depricated_20190915(lon=[135., 150.], lat=[30., 41.5], minMag=4.
 		#rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3])]]
 		rlist +=[[myDt, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]
 		if fout!=None:
-			myDtStr='%d/%d/%d %d:%d:%d.%d' % (myDt.year, myDt.month, myDt.day, myDt.hour, myDt.minute, myDt.second, myDt.microsecond)
-			#
-			#f.write('%s\t%s\t%s\t%s\n' % (rw[0], rw[1], rw[2], rw[4]))
-			#f.write('%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4]))
-			
-			#f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr] + rw[1:]]))
-			f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]))
+			with open(fout, 'a') as f:
+				myDtStr='%d/%d/%d %d:%d:%d.%d' % (myDt.year, myDt.month, myDt.day, myDt.hour, myDt.minute, myDt.second, myDt.microsecond)
+				#
+				#f.write('%s\t%s\t%s\t%s\n' % (rw[0], rw[1], rw[2], rw[4]))
+				#f.write('%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4]))
+				
+				#f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr] + rw[1:]]))
+				f.write('%s\n' % '\t'.join([str(x) for x in [myDtStr, float(rw[1]), float(rw[2]), float(rw[4]), float(rw[3]), mpd.date2num(myDt)]]))
 
-#f.write('%s\t%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4], rw[3]))	# indlude depth...
-if fout!=None:
-	f.close()
+	#f.write('%s\t%s\t%s\t%s\t%s\n' % (myDtStr, rw[1], rw[2], rw[4], rw[3]))	# indlude depth...
+	#if fout!=None:
+	#	f.close()
 	#
 	#return catlist
 	# to do:
@@ -682,9 +684,10 @@ if fout!=None:
 	if rec_array:
 		#rlist=numpy.rec.array(rlist, dtype=[('event_date', 'M8[us]'), ('lat','f'), ('lon','f'), ('mag','f'), ('depth','f')])
 		# note: specify f8 (or greater), or float dates might be truncated).
-		rlist=numpy.rec.array((rlist if len(rlist)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','f8'), ('lon','f8'), ('mag','f8'), ('depth','f8'), ('event_date_float', 'f8')])
+		#rlist=numpy.rec.array((rlist if len(rlist)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','>f8'), ('lon','>f8'), ('mag','>f8'), ('depth','>f8'), ('event_date_float', '>f8')])
+		return numpy.rec.array((rlist if len(rlist)>0 else [[]]), dtype=[('event_date', 'M8[us]'), ('lat','>f8'), ('lon','>f8'), ('mag','>f8'), ('depth','>f8'), ('event_date_float', '>f8')])
 
-return rlist
+	return rlist
 #
 #
 def dictfromANSS(lons=[135., 150.], lats=[30., 41.5], mc=4.0, date_range=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=999999, fout='cats/mycat.cat'):
