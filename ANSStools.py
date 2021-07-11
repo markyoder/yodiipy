@@ -73,35 +73,42 @@ tzutc=pytz.timezone('UTC')
 class ANSS_Comcat_catalog(object):
 	# TODO: datestring re-formatting is totally forked. need to figure that out...
 	#
-	anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv'
+	anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1'
 	input_delim=','
 	#
 	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5,
 				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc),
-				 Nmax=None):
+				 Nmax=None, max_rows_api=20000, verbose=False):
+		#
+		self.__dict__.update({ky:vl for ky,vl in locals().items() if not ky in ('self', '__class__')})
 		#
 		delim_dt = '-'
 		delim_tm = ':'
 		#
 		if to_date is None:
 			to_date = dtm.datetime.now(tzutc)
-		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='%20')
-		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='%20')
+		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='T')
+		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='T')
 		#
 		#print('*** DEBUG: from_date:: {}'.format(from_date))
 		#print('*** DEBUT: to_date:: {}'.format(to_date))
 		#
-		# TODO: FIXME: magnitudes do not look right...
-		# 'starttime':from_date, 'endtime':to_date,
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
 				   'eventtype':'earthquake', 'orderby':'time', 'limit':Nmax
 				  }
 		anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
 		#
+		# TODO: current limit in web API is 20k events. If n>limit, break up the query.
+		#  NOTE: in principle, we could use the limit=n_max, then update startdate and repeat the
+		#   query, until count=0. however, this can fail in a not-obvious way
+		#  use count_url_str to get the total row-count. if n>limit;
+		#   - determine number of queries
 		#
-		url_str = '{}?starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date,
-													  urllib.parse.urlencode(anss_prams) )
+		#
+		count_url_str = '{}/count?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
+		#
+		url_str = '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
 		self.url_str = url_str
 		# 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv?starttime=2019-09-01%2000:00:00&endtime=2019-09-14%2006:16:43&limit=500&minmagnitude=3.5&minlatitude=32.0&maxlatitude=45.0&minlongitude=-125.0&maxlongitude=-115.0&eventtype=earthquake&orderby=time'
 		#print('*** DEBUG:  ', url_str)
@@ -119,6 +126,8 @@ class ANSS_Comcat_catalog(object):
 		return self.get_f()
 	#
 	def get_f(self, url_str=None):
+		if self.verbose:
+			print('*** DEBUG: {}'.format((url_str or self.url_str)) )
 		return urllib.request.urlopen((url_str or self.url_str) )
 	#
 	def get_data(self):
@@ -135,7 +144,6 @@ class ANSS_Comcat_catalog(object):
 			   ('mag','mag', cols.index('mag'), float, '>f8'),
 			   ('depth','depth', cols.index('depth'), float, '>f8')]
 			self.col_map = col_map
-			#
 			#
 			# this is an easy map, and we want to preserve order, so let's just make it a list
 			#col_map = {'time':'event_date', 'latitude':'lat', 'longitude':'lon', 'mag':'mag', 'depth':'depth'}
@@ -288,9 +296,9 @@ class ANSS_Comcat_catalog(object):
 #                    fout=None, rec_array=True)
 def cat_from_anss_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0,
                     dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None,
-                    fout=None, rec_array=True):
+                    fout=None, rec_array=True, verbose=False):
 	#
-	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], Nmax=Nmax)
+	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], Nmax=Nmax, verbose=verbose)
 	#
 	if not fout is None:
 		#
