@@ -71,31 +71,31 @@ tzutc=pytz.timezone('UTC')
 # let's take this opportunity to revise our syntax and introduce class structure. We can maintain backwards
 # compatibility with a function wrapper.
 class ANSS_Comcat_catalog(object):
-	# TODO: datestring re-formatting is totally forked. need to figure that out...
 	#
 	anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1'
 	input_delim=','
 	#
 	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5,
 				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc),
-				 Nmax=None, max_rows_api=20000, verbose=False):
+				 Nmax=18000, Nmax_api=20000, verbose=False):
 		#
 		self.__dict__.update({ky:vl for ky,vl in locals().items() if not ky in ('self', '__class__')})
 		#
 		delim_dt = '-'
 		delim_tm = ':'
+		delim_dt_tm_sep = 'T'
 		#
 		if to_date is None:
 			to_date = dtm.datetime.now(tzutc)
-		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='T')
-		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='T')
+		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
+		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
 		#
 		#print('*** DEBUG: from_date:: {}'.format(from_date))
 		#print('*** DEBUT: to_date:: {}'.format(to_date))
 		#
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
-				   'eventtype':'earthquake', 'orderby':'time', 'limit':Nmax
+				   'eventtype':'earthquake', 'orderby':'time', 'limit': min(Nmax,Nmax_api)
 				  }
 		anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
 		#
@@ -105,22 +105,18 @@ class ANSS_Comcat_catalog(object):
 		#  use count_url_str to get the total row-count. if n>limit;
 		#   - determine number of queries
 		#
-		#
 		count_url_str = '{}/count?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
 		#
 		url_str = '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
 		self.url_str = url_str
-		# 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv?starttime=2019-09-01%2000:00:00&endtime=2019-09-14%2006:16:43&limit=500&minmagnitude=3.5&minlatitude=32.0&maxlatitude=45.0&minlongitude=-125.0&maxlongitude=-115.0&eventtype=earthquake&orderby=time'
-		#print('*** DEBUG:  ', url_str)
-		#f = urllib.request.urlretrieve(url_str)
 		#
 		# Keep everything, then write procedures to subset, or subset now, and if we want to keep everything later,
 		#. deal with it then? We'll (sort of) do both by parsing out to functions, so we can subclase.
 		data = self.get_data()
-
 		#
 		self.__dict__.update({ky:val for ky,val in locals().items() if not ky in ('self', '__class__')})
 	#
+    # Not sure if we need this, or if we can support this as a @property and handle multiple-queries to handle the query limit.
 	@property
 	def f(self):
 		return self.get_f()
@@ -131,51 +127,49 @@ class ANSS_Comcat_catalog(object):
 		return urllib.request.urlopen((url_str or self.url_str) )
 	#
 	def get_data(self):
+		# TODO: keep working on this...
+		# note: cols time, updated
 		# for new "get" functions, we want all changes to be here.
-		#
 		#
 		# note: it's probably faster to just fetch all the data all at once, but i was having
 		#. trouble iterating over it (though i didn't really try very hard either.)
-		with self.get_f() as fin:
-			cols = (fin.readline().decode()[:-1]).split(self.input_delim)
-			col_map = [('time','event_date', cols.index('time'), self.get_anss_datetime, 'M8[us]'),
-			   ('latitude','lat', cols.index('latitude'), float, '>f8'),
-			   ('longitude','lon', cols.index('longitude'), float, '>f8'),
-			   ('mag','mag', cols.index('mag'), float, '>f8'),
-			   ('depth','depth', cols.index('depth'), float, '>f8')]
-			self.col_map = col_map
+		from_date = self.from_date
+		data = []
+		while n_new_records not in [ 0, n_new_records ]:
+			# '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
+			url_str = f'{self.anss_url}/query?format=csv&starttime={from_date}&endtime={self.to_date}&{urllib.parse.urlencode(self.anss_prams)}&orderby=time-asc'
 			#
-			# this is an easy map, and we want to preserve order, so let's just make it a list
-			#col_map = {'time':'event_date', 'latitude':'lat', 'longitude':'lon', 'mag':'mag', 'depth':'depth'}
+			with self.get_f() as fin:
+				cols = (fin.readline().decode()[:-1]).split(self.input_delim)
+				col_map = [('time','event_date', cols.index('time'), self.get_anss_datetime, 'M8[us]'),
+				   ('latitude','lat', cols.index('latitude'), float, '>f8'),
+				   ('longitude','lon', cols.index('longitude'), float, '>f8'),
+				   ('mag','mag', cols.index('mag'), float, '>f8'),
+				   ('depth','depth', cols.index('depth'), float, '>f8')]
+				self.col_map = col_map
+				#
+				# this is an easy map, and we want to preserve order, so let's just make it a list
+				#col_map = {'time':'event_date', 'latitude':'lat', 'longitude':'lon', 'mag':'mag', 'depth':'depth'}
+				#
+				new_data = []
+				for rw in fin:
+					#print('** DEBUG: ', rw)
+					rws = rw.decode()[:-1].split(self.input_delim)
+					#print('*** DEBUG rws: ', rws)
+					try:
+						new_data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map]]
+						new_data[-1] += [mpd.date2num(new_data[-1][0])]
+					except Exception as e:
+						print('*** WARNING: unable to process event into catalog: {}'.format([rws[k]
+																		for s1, s2, k, f1, dt in col_map]))
+						print('*** Exception: {}'.format(e))
 			#
-			#data_in = fin.read().decode().split('\n')
-			data = []
-			for rw in fin:
-				#print('** DEBUG: ', rw)
-				rws = rw.decode()[:-1].split(self.input_delim)
-				#print('*** DEBUG rws: ', rws)
-				try:
-					data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map]]
-					data[-1] += [mpd.date2num(data[-1][0])]
-				except Exception as e:
-					print('*** WARNING: unable to process event into catalog: {}'.format([rws[k]
-																	for s1, s2, k, f1, dt in col_map]))
-					print('*** Exception: {}'.format(e))
-		#print('*** DEBUG: ', len(data_in)
-		#print('*** DEBUG: ', data_in[0:10])
-		#
-		
-		#
-		# it might be faster to zip() or otherwise transpose, but this is not the compute intensive part of
-		#.  any of these jobs, so even some nested looping wont' kill us.
-#		 data = []
-#		 for rw in data_in:
-#			 print('** DEBUG: ', rw)
-#			 rws = rw.split(self.input_delim)
-#			 data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map]]
-#			 data[-1] += [mpd.date2num(data[-1][0])]
-		#
-		data.sort(key = lambda rw:rw[-1])
+			# it might be faster to zip() or otherwise transpose, but this is not the compute intensive part of
+			#.  any of these jobs, so even some nested looping wont' kill us.
+			new_data.sort(key = lambda rw:rw[-1])
+			from_date = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
+			#
+			data += new_data
 		self.data = data
 		return data
 	#
