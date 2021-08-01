@@ -95,9 +95,10 @@ class ANSS_Comcat_catalog(object):
 		#
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
-				   'eventtype':'earthquake', 'orderby':'time', 'limit': min(Nmax,Nmax_api)
+				   'eventtype':'earthquake', 'limit': min(Nmax,Nmax_api, 'starttime':from_date, 'endtime':to_date)
 				  }
-		anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
+		# , 'orderby':'time-asc'
+		self.anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
 		#
 		# TODO: current limit in web API is 20k events. If n>limit, break up the query.
 		#  NOTE: in principle, we could use the limit=n_max, then update startdate and repeat the
@@ -105,16 +106,23 @@ class ANSS_Comcat_catalog(object):
 		#  use count_url_str to get the total row-count. if n>limit;
 		#   - determine number of queries
 		#
-		count_url_str = '{}/count?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
+		#count_url_str = '{}/count?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
 		#
-		url_str = '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
-		self.url_str = url_str
+		#url_str = '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
+		#self.url_str = url_str
 		#
 		# Keep everything, then write procedures to subset, or subset now, and if we want to keep everything later,
 		#. deal with it then? We'll (sort of) do both by parsing out to functions, so we can subclase.
 		data = self.get_data()
 		#
 		self.__dict__.update({ky:val for ky,val in locals().items() if not ky in ('self', '__class__')})
+	#
+	@property
+	def count_url_str(self):
+		return '{}/count?format=csv&&{}'.format(self.anss_url,urllib.parse.urlencode(self.anss_prams) )
+	@property
+	def url_str(self):
+		return '{}/query?format=csv&{}'.format(self.anss_url, urllib.parse.urlencode(self.anss_prams) )
 	#
     # Not sure if we need this, or if we can support this as a @property and handle multiple-queries to handle the query limit.
 	@property
@@ -133,11 +141,11 @@ class ANSS_Comcat_catalog(object):
 		#
 		# note: it's probably faster to just fetch all the data all at once, but i was having
 		#. trouble iterating over it (though i didn't really try very hard either.)
-		from_date = self.from_date
+		#from_date = self.from_date
 		data = []
 		while n_new_records not in [ 0, n_new_records ]:
 			# '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
-			url_str = f'{self.anss_url}/query?format=csv&starttime={from_date}&endtime={self.to_date}&{urllib.parse.urlencode(self.anss_prams)}&orderby=time-asc'
+			#url_str = f'{self.anss_url}/query?format=csv&starttime={from_date}&endtime={self.to_date}&{urllib.parse.urlencode(self.anss_prams)}&orderby=time-asc'
 			#
 			with self.get_f() as fin:
 				cols = (fin.readline().decode()[:-1]).split(self.input_delim)
@@ -167,7 +175,8 @@ class ANSS_Comcat_catalog(object):
 			# it might be faster to zip() or otherwise transpose, but this is not the compute intensive part of
 			#.  any of these jobs, so even some nested looping wont' kill us.
 			new_data.sort(key = lambda rw:rw[-1])
-			from_date = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
+			#from_date = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
+			self.anss_prams['startdate'] = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
 			#
 			data += new_data
 		self.data = data
