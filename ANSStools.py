@@ -73,35 +73,56 @@ tzutc=pytz.timezone('UTC')
 class ANSS_Comcat_catalog(object):
 	# TODO: datestring re-formatting is totally forked. need to figure that out...
 	#
+	# changing the query string handling a bit:
 	anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv'
+	#anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1'
 	input_delim=','
 	#
 	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5,
-				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc),
+				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc), orderby='time',
 				 Nmax=None):
+		#
+		# TODO: Abstract this to handle circular catalogs, and generally to allow more full access to the API. Maybe use a schema like
+		#  API_{pram_name}.
+		#
+		# orderby: what it sounds like. options are time, time-asc, magnitude, magnitude-asc. We'll need to handle ascending/descending
+		#   ordering properly.
+		#
+		order_col  = orderby
+		order_type = 'desc'
+		if orderby.endswith('-asc'):
+			order_col, order_type = orderby.split('-')
 		#
 		delim_dt = '-'
 		delim_tm = ':'
+		delim_dt_tm_sep = 'T'
 		#
+		# TODO: consider using PANDAS date string handlers
 		if to_date is None:
 			to_date = dtm.datetime.now(tzutc)
-		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='%20')
-		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep='%20')
+		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
+		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
 		#
 		#print('*** DEBUG: from_date:: {}'.format(from_date))
 		#print('*** DEBUT: to_date:: {}'.format(to_date))
 		#
 		# TODO: FIXME: magnitudes do not look right...
 		# 'starttime':from_date, 'endtime':to_date,
+		#anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
+		#		   'maxlongitude':max_lon,
+		#		   'eventtype':'earthquake', 'orderby':'time', 'limit':Nmax
+		#		  }
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
-				   'eventtype':'earthquake', 'orderby':'time', 'limit':Nmax
+					'eventtype':'earthquake', 'limit': Nmax, 'starttime':from_date, 'endtime':to_date, 'orderby':orderby
 				  }
+		#
 		anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
 		#
 		#
 		url_str = '{}?starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date,
 													  urllib.parse.urlencode(anss_prams) )
+		url_str = '{}?{}'.format(self.anss_url, urllib.parse.urlencode(anss_prams) )
 		self.url_str = url_str
 		# 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv?starttime=2019-09-01%2000:00:00&endtime=2019-09-14%2006:16:43&limit=500&minmagnitude=3.5&minlatitude=32.0&maxlatitude=45.0&minlongitude=-125.0&maxlongitude=-115.0&eventtype=earthquake&orderby=time'
 		#print('*** DEBUG:  ', url_str)
