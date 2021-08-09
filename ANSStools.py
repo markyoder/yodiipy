@@ -188,7 +188,7 @@ class ANSS_Comcat_catalog(object):
 #			 data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map]]
 #			 data[-1] += [mpd.date2num(data[-1][0])]
 		#
-		data.sort(key = lambda rw:rw[-1])
+		#data.sort(key = lambda rw:rw[-1])
 		self.data = data
 		return data
 	#
