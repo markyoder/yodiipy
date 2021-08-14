@@ -65,8 +65,78 @@ tzutc=pytz.timezone('UTC')
 #. the remaining infrastructure. in fact, the hierarchal get_list() -> process_list_for_catalog() organization
 #. might not look so silly any longer, since we presumably only have to rewrite the very top layer.
 #
-#
-# copy some stuff from ANSS tools; we'll code this up here and then move it over:
+# ANSS_Comcat_catalog
+class ANSS_Comcat_catalog_aggregator():
+	# TODO: once this is working, invert the naming hierarchy, so this will be ANSS_Comct_catalog(), and the chile class will be
+	#  ANSS_Comcat_catalog_instance(), or something like that. In this we'll rewrite most of the meaningful functionality and
+	#  sort of ironic-recursively use instances of the parent class to populate the data, but it might be nice down the way to preserve
+	# some of the utility functions.
+	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5, m_max=None,
+				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc), orderby='time',
+				 Nmax=None, Nmax_api=15000, max_queries=10):
+		'''
+		# Conduct multiple queries of the ANSS catalog to aggregate the full query request. This is most pointedly in response to the
+		#  20k item limit imposed by the web API.
+		#  dates are submitted as datetimes. String formats may or may not be supported (not sure if they are now; could easily be supported
+		#    in the future...)
+		# @orderby: time, time-asc, magnitude, magnitude-asc.
+		# @Nmax: max total records to be returned (NOTE: be prepared for this to be approximate, though I think we will enforce it rigorously)
+		# @Nmax_api: max records per-query. Nominally, this can be set to 20000, whcih is the max allowed by the ComCat API, but bumping it down
+		#  a bit might not be a bad idea either...
+		'''
+		#
+		# Most of the parameters can just be passed to the query objects directly.
+		query_prams = {ky:vl for ky,vl in locals().items() if not ky in ('self', '__class__', 'Nmax_api', 'max_queries')}
+		query_prams['Nmax']=Nmax_api
+		#order_map = {'magnitude':'mag', 'time':'event_date'}
+		#order_map = {'magnitude':['mag', 'minmagnitude', 'maxmagnitude'], 'time':['event_date', 'starttime', 'endtime']}
+		order_map = {'magnitude':['mag', 'm_c', 'm_max'], 'time':['event_date', 'from_date', 'to_date']}
+		#
+		# First, how are we sorting?
+		if orderby.endswith('-asc'):
+			order_col, order_type = orderby.split('-')
+			f_mm = numpy.max
+			order_col, min_pram, max_pram = order_map[order_col]
+			mm_pram=min_pram
+			
+		else:
+			order_col=orderby
+			order_type='desc'
+			f_mm = numpy.min
+			order_col, min_pram, max_pram = order_map[order_col]
+			mm_pram = max_pram
+		#
+		# TODO: move this into a get_data() function... (this would be the place for the break) or inherit and just hijack the get_data() function?
+		N_returned = Nmax_api
+		#
+		data = []
+		n_queries = 0
+		while N_returned > (0 + (n_queries>0) ) and n_queries<max_queries:
+			print(f'*** DEBUG[{n_queries}, {N_returned}]: query_prams:: {query_prams}')
+			#
+			anss_data = ANSS_Comcat_catalog(**query_prams)
+			#
+			N_returned = len(anss_data.data)
+			if N_returned == 0:
+				break
+			data += anss_data.as_list()
+			#
+			n_queries += 1
+			#
+			# revise query:
+			# NOTE: if we're positive that we are not sorting, we can just pick off the last entry to revise the query.
+			#  However, this is an easy mistake to make... also, we don't have control over how data are returned, so we should
+			#  just evaluate the
+			k_col = anss_data.get_cols().index(order_col)
+			mm_value = f_mm([rw[k_col] for rw in anss_data.data])
+			#
+			query_prams[mm_pram]=mm_value
+			if not Nmax is None:
+				query_prams['Nmax'] = min(Nmax_api, Nmax-len(data))
+		#
+		self.data = data
+		
+		
 
 # let's take this opportunity to revise our syntax and introduce class structure. We can maintain backwards
 # compatibility with a function wrapper.
@@ -78,7 +148,7 @@ class ANSS_Comcat_catalog(object):
 	#anss_url = 'https://earthquake.usgs.gov/fdsnws/event/1'
 	input_delim=','
 	#
-	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5,
+	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5, m_max=None,
 				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc), orderby='time',
 				 Nmax=None):
 		#
@@ -112,7 +182,7 @@ class ANSS_Comcat_catalog(object):
 		#		   'maxlongitude':max_lon,
 		#		   'eventtype':'earthquake', 'orderby':'time', 'limit':Nmax
 		#		  }
-		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
+		anssPrams={  'minmagnitude':m_c, 'maxmagnitude':m_max, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
 					'eventtype':'earthquake', 'limit': Nmax, 'starttime':from_date, 'endtime':to_date, 'orderby':orderby
 				  }
@@ -120,18 +190,15 @@ class ANSS_Comcat_catalog(object):
 		anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
 		#
 		#
-		url_str = '{}?starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date,
-													  urllib.parse.urlencode(anss_prams) )
+		#url_str = '{}?starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date,
+		#											  urllib.parse.urlencode(anss_prams) )
 		url_str = '{}?{}'.format(self.anss_url, urllib.parse.urlencode(anss_prams) )
 		self.url_str = url_str
 		# 'https://earthquake.usgs.gov/fdsnws/event/1/query.csv?starttime=2019-09-01%2000:00:00&endtime=2019-09-14%2006:16:43&limit=500&minmagnitude=3.5&minlatitude=32.0&maxlatitude=45.0&minlongitude=-125.0&maxlongitude=-115.0&eventtype=earthquake&orderby=time'
 		#print('*** DEBUG:  ', url_str)
-		#f = urllib.request.urlretrieve(url_str)
 		#
-		# Keep everything, then write procedures to subset, or subset now, and if we want to keep everything later,
-		#. deal with it then? We'll (sort of) do both by parsing out to functions, so we can subclase.
-		data = self.get_data()
-
+		# get the data...
+		data = self.get_data(set_data=False)
 		#
 		self.__dict__.update({ky:val for ky,val in locals().items() if not ky in ('self', '__class__')})
 	#
@@ -142,19 +209,26 @@ class ANSS_Comcat_catalog(object):
 	def get_f(self, url_str=None):
 		return urllib.request.urlopen((url_str or self.url_str) )
 	#
-	def get_data(self):
+	def get_cols(self):
+		return [rw[1] for rw in sorted(self.col_map, key=lambda rw: rw[2])]
+		
+	def get_data(self, set_data=True):
 		# for new "get" functions, we want all changes to be here.
 		#
 		#
-		# note: it's probably faster to just fetch all the data all at once, but i was having
+		# note: it's probably faster to just fetch all the data all at once (ie instead of "for rw in fin"), but i was having
 		#. trouble iterating over it (though i didn't really try very hard either.)
 		with self.get_f() as fin:
 			cols = (fin.readline().decode()[:-1]).split(self.input_delim)
+			#self.cols = cols
+			#
+			# use this to construct dtypes and other things.
 			col_map = [('time','event_date', cols.index('time'), self.get_anss_datetime, 'M8[us]'),
 			   ('latitude','lat', cols.index('latitude'), float, '>f8'),
 			   ('longitude','lon', cols.index('longitude'), float, '>f8'),
 			   ('mag','mag', cols.index('mag'), float, '>f8'),
-			   ('depth','depth', cols.index('depth'), float, '>f8')]
+			   ('depth','depth', cols.index('depth'), float, '>f8'),
+			   ('event_date_float','event_date_float', len(cols),float, '>f8')]
 			self.col_map = col_map
 			#
 			#
@@ -168,7 +242,7 @@ class ANSS_Comcat_catalog(object):
 				rws = rw.decode()[:-1].split(self.input_delim)
 				#print('*** DEBUG rws: ', rws)
 				try:
-					data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map]]
+					data += [[f_cast(rws[k])  for n_in, n_out, k, f_cast, d_type in col_map[:-1]]]
 					data[-1] += [mpd.date2num(data[-1][0])]
 				except Exception as e:
 					print('*** WARNING: unable to process event into catalog: {}'.format([rws[k]
@@ -189,25 +263,28 @@ class ANSS_Comcat_catalog(object):
 #			 data[-1] += [mpd.date2num(data[-1][0])]
 		#
 		#data.sort(key = lambda rw:rw[-1])
-		self.data = data
+		if set_data:
+			self.data = data
 		return data
 	#
 	# TODO: fix these to simplify (so we only have to make changes in one place) if we subclass to
 	@property
 	def dtype(self):
-		return [(rw[1], rw[4]) for rw in self.col_map] + [('event_date_float', 'f8')]
+		#return [(rw[1], rw[4]) for rw in self.col_map] + [('event_date_float', 'f8')]
+		return [(rw[1], rw[4]) for rw in self.col_map]
 	#
 	def as_list(self):
 		return self.data
 	def as_dict(self):
 		return {ky:cols[k] for k, (ky, cols) in enumerate(zip([nm for nm,tp in self.dtype], zip(*self.data)))}
 	#
-	def as_recarray(self):
+	def as_recarray(self,X=None):
 		#
 		# generally, i've found this (and any of the simpler, more intuitive) syntax unreliable,
 		#. but it appears to be working in ANSStools:
 		#
-		X = self.data
+		if X is None:
+			X = self.data
 		#
 		return numpy.rec.array(([tuple(x) for x in X] if len(X)>0 else [[]]), dtype=self.dtype)
 		#					   dtype = [(rw[1], rw[4]) for rw in self.col_map] + [('event_date_float', 'f8')] )
@@ -303,15 +380,12 @@ class ANSS_Comcat_catalog(object):
 # now, write a wrapper or two to mimic the standard UI. we should probably also just get rid of/replace
 #. the old ANSS catalog stuff.
 #
-# call signature like:
-#def cat_from_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0,
-#                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None,
-#                    fout=None, rec_array=True)
+# Todo; do we need to keep cat_from_anss_comcat()?
 def cat_from_anss_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0,
-                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None,
+                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], orderby='time', Nmax=None,
                     fout=None, rec_array=True):
 	#
-	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], Nmax=Nmax)
+	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], orderby=orderby, Nmax=Nmax)
 	#
 	if not fout is None:
 		#
