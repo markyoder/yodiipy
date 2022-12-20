@@ -95,7 +95,7 @@ class ANSS_Comcat_catalog(object):
 		#
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
-				   'eventtype':'earthquake', 'limit': min(Nmax,Nmax_api, 'starttime':from_date, 'endtime':to_date)
+				   'eventtype':'earthquake', 'limit': min(Nmax,Nmax_api), 'starttime':from_date, 'endtime':to_date
 				  }
 		# , 'orderby':'time-asc'
 		self.anss_prams = {ky:vl for ky,vl in anssPrams.items() if not (vl in (chr(9), chr(32)) or vl is None)}
