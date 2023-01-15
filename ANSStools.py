@@ -13,11 +13,10 @@ try:
 except:
 	print("failed while loading: urllib.request, urllib.parse, urllib.error.\n probably Python 2.x?")
 	#urllib.request.urlopen = urllib.urlopen
-
-try:
-	import ullib2
-except:
-	print("failed while loading urllib and/or urllib. maybe python 3.x?")
+	try:
+		import ullib2
+	except:
+		print("failed while loading urllib and/or urllib. maybe python 3.x?")
 	
 #import urllib.request, urllib.error, urllib.parse
 import requests
@@ -77,21 +76,25 @@ class ANSS_Comcat_catalog(object):
 	#
 	def __init__(self, min_lon=-125., max_lon=-115., min_lat=32., max_lat=42., m_c=3.5,
 				 from_date=dtm.datetime(2000, 1,1, tzinfo=tzutc), to_date=dtm.datetime.now(tzutc),
-				 Nmax=18000, Nmax_api=20000, verbose=False):
+				 Nmax=18000, Nmax_api=20000, delim_dt='-', delim_tm=':', delim_dt_tm_sep='T', verbose=False, fetch_data=True):
 		#
 		self.__dict__.update({ky:vl for ky,vl in locals().items() if not ky in ('self', '__class__')})
 		#
-		delim_dt = '-'
-		delim_tm = ':'
-		delim_dt_tm_sep = 'T'
+		if not fetch_data:
+			return None
+		#delim_dt = '-'
+		#delim_tm = ':'
+		#delim_dt_tm_sep = 'T'
+		Nmax = Nmax or 18000
+		Nmax_api = Nmax_api or Nmax
 		#
 		if to_date is None:
 			to_date = dtm.datetime.now(tzutc)
 		from_date = self.anss_comcat_DateStr(from_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
 		to_date   = self.anss_comcat_DateStr(to_date, delim_dt=delim_dt, delim_tm=delim_tm, dt_tm_sep=delim_dt_tm_sep)
 		#
-		#print('*** DEBUG: from_date:: {}'.format(from_date))
-		#print('*** DEBUT: to_date:: {}'.format(to_date))
+		print('*** DEBUG: init.from_date:: {}'.format(from_date))
+		print('*** DEBUG: init.to_date:: {}'.format(to_date))
 		#
 		anssPrams={  'minmagnitude':m_c, 'minlatitude':min_lat, 'maxlatitude':max_lat, 'minlongitude':min_lon,
 				   'maxlongitude':max_lon,
@@ -122,7 +125,11 @@ class ANSS_Comcat_catalog(object):
 		return '{}/count?format=csv&&{}'.format(self.anss_url,urllib.parse.urlencode(self.anss_prams) )
 	@property
 	def url_str(self):
-		return '{}/query?format=csv&{}'.format(self.anss_url, urllib.parse.urlencode(self.anss_prams) )
+		# TODO: looks like a problem wiht urlencode() choking on a ":" delimiter in a string?
+		#
+		#print('*** DEBUG [ url_prams ]: ', self.anss_prams)
+		#print(f'*** DEBUG [ url_str ]: {urllib.parse.urlencode(self.anss_prams, safe=self.delim_tm)}')
+		return '{}/query?format=csv&{}'.format(self.anss_url, urllib.parse.urlencode(self.anss_prams, safe=self.delim_tm) )
 	#
     # Not sure if we need this, or if we can support this as a @property and handle multiple-queries to handle the query limit.
 	@property
@@ -131,7 +138,7 @@ class ANSS_Comcat_catalog(object):
 	#
 	def get_f(self, url_str=None):
 		if self.verbose:
-			print('*** DEBUG: {}'.format((url_str or self.url_str)) )
+			print('*** DEBUG (get_f() ): {}'.format((url_str or self.url_str)) )
 		return urllib.request.urlopen((url_str or self.url_str) )
 	#
 	def get_data(self):
@@ -143,7 +150,10 @@ class ANSS_Comcat_catalog(object):
 		#. trouble iterating over it (though i didn't really try very hard either.)
 		#from_date = self.from_date
 		data = []
-		while n_new_records not in [ 0, n_new_records ]:
+		n_new_records = None
+		n_queries = 0
+		while n_new_records is None or n_new_records > 0 :
+			n_queries += 1
 			# '{}/query?format=csv&starttime={}&endtime={}&{}'.format(self.anss_url,from_date, to_date, urllib.parse.urlencode(anss_prams) )
 			#url_str = f'{self.anss_url}/query?format=csv&starttime={from_date}&endtime={self.to_date}&{urllib.parse.urlencode(self.anss_prams)}&orderby=time-asc'
 			#
@@ -159,6 +169,7 @@ class ANSS_Comcat_catalog(object):
 				# this is an easy map, and we want to preserve order, so let's just make it a list
 				#col_map = {'time':'event_date', 'latitude':'lat', 'longitude':'lon', 'mag':'mag', 'depth':'depth'}
 				#
+				n_new_records=0
 				new_data = []
 				for rw in fin:
 					#print('** DEBUG: ', rw)
@@ -171,14 +182,25 @@ class ANSS_Comcat_catalog(object):
 						print('*** WARNING: unable to process event into catalog: {}'.format([rws[k]
 																		for s1, s2, k, f1, dt in col_map]))
 						print('*** Exception: {}'.format(e))
-			#
-			# it might be faster to zip() or otherwise transpose, but this is not the compute intensive part of
-			#.  any of these jobs, so even some nested looping wont' kill us.
-			new_data.sort(key = lambda rw:rw[-1])
-			#from_date = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
-			self.anss_prams['startdate'] = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
-			#
-			data += new_data
+				new_data.sort(key = lambda rw:rw[-1], reverse=True)
+				#
+				while len(new_data)>0 and new_data[0] in data:
+					popped = new_data.pop(0)
+				n_new_records = len(new_data)
+				#
+				#print('** ** ** date?:: ', self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep))
+				#
+				if len(new_data)>0:
+					print(f'*** new_data[-1] [len={len(new_data)}]:  {new_data[-1]}')
+					print(f'*** new_data[0] [len={len(new_data)}]:  {new_data[0]}')
+					#
+					#self.anss_prams['starttime'] = self.anss_comcat_DateStr(new_data[-1][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
+					self.anss_prams['endtime'] = self.anss_comcat_DateStr(new_data[0][0], delim_dt=self.delim_dt, delim_tm=self.delim_tm, dt_tm_sep=self.delim_dt_tm_sep)
+					#
+					data += new_data
+#				if n_queries > 5:
+#					break
+		data.sort(key = lambda rw:rw[-1])
 		self.data = data
 		return data
 	#
@@ -298,10 +320,9 @@ class ANSS_Comcat_catalog(object):
 #                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None,
 #                    fout=None, rec_array=True)
 def cat_from_anss_comcat(lon=[135., 150.], lat=[30., 41.5], minMag=4.0,
-                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None,
-                    fout=None, rec_array=True, verbose=False):
+                    dates0=[dtm.datetime(2005,1,1, tzinfo=tzutc), None], Nmax=None, Nmax_api=None, fout=None, rec_array=True, verbose=False):
 	#
-	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], Nmax=Nmax, verbose=verbose)
+	cat = ANSS_Comcat_catalog(min_lon=lon[0], max_lon=lon[1], min_lat=lat[0], max_lat=lat[1], m_c=minMag, from_date=dates0[0], to_date=dates0[1], Nmax=Nmax, Nmax_api=Nmax_api, verbose=verbose)
 	#
 	if not fout is None:
 		#
